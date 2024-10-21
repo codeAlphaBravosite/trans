@@ -3,196 +3,370 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Azure Speech-to-Text Converter</title>
-    
-    <!-- Azure Speech SDK -->
+    <title>Modern Speech-to-Text</title>
     <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
-    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --background: #f9fafb;
+            --card: #ffffff;
+            --text: #1f2937;
+            --border: #e5e7eb;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
         }
 
         body {
-            background-color: #f5f5f5;
+            background-color: var(--background);
+            color: var(--text);
+            line-height: 1.5;
             padding: 2rem;
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1000px;
             margin: 0 auto;
-            background-color: white;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
             padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
         }
 
         h1 {
-            color: #2c3e50;
+            font-size: 1.875rem;
+            font-weight: 700;
             margin-bottom: 2rem;
             text-align: center;
+            color: var(--primary);
         }
 
-        .upload-section {
-            margin-bottom: 2rem;
+        .config-form {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .input-group label {
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+
+        input, select {
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            ring: 2px solid var(--primary);
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 1rem;
             padding: 2rem;
-            border: 2px dashed #bdc3c7;
-            border-radius: 8px;
             text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
         }
 
-        .upload-section.drag-over {
-            background-color: #e8f4f8;
-            border-color: #3498db;
+        .upload-zone.drag-over {
+            border-color: var(--primary);
+            background-color: #f5f7ff;
         }
 
         .button {
-            background-color: #3498db;
+            background-color: var(--primary);
             color: white;
-            padding: 0.8rem 1.5rem;
+            padding: 0.75rem 1.5rem;
             border: none;
-            border-radius: 4px;
+            border-radius: 0.5rem;
+            font-weight: 500;
             cursor: pointer;
-            font-size: 1rem;
-            margin: 0.5rem;
-            transition: background-color 0.3s;
+            transition: background-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .button:hover {
-            background-color: #2980b9;
+            background-color: var(--primary-hover);
         }
 
         .button:disabled {
-            background-color: #bdc3c7;
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
-        #transcriptionOutput {
-            margin-top: 2rem;
-            padding: 1rem;
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
+        .button-secondary {
+            background-color: white;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .button-secondary:hover {
+            background-color: var(--background);
+        }
+
+        .actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        .output-container {
+            position: relative;
+        }
+
+        .output {
             min-height: 200px;
             max-height: 400px;
             overflow-y: auto;
-            background-color: #fff;
+            padding: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            background-color: white;
+            font-size: 0.95rem;
+            line-height: 1.6;
         }
 
-        .status {
-            margin-top: 1rem;
-            color: #7f8c8d;
-            font-size: 0.9rem;
+        .copy-button {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.5rem;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: all 0.2s;
         }
 
-        .progress {
-            margin-top: 1rem;
-            height: 4px;
-            background-color: #f0f0f0;
-            border-radius: 2px;
-            overflow: hidden;
-            display: none;
+        .copy-button:hover {
+            background: var(--background);
         }
 
         .progress-bar {
+            height: 4px;
+            background-color: #e5e7eb;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 1rem 0;
+            display: none;
+        }
+
+        .progress-fill {
             height: 100%;
-            background-color: #3498db;
+            background-color: var(--primary);
             width: 0%;
             transition: width 0.3s;
+        }
+
+        .status {
+            text-align: center;
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-top: 0.5rem;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: #059669;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Audio to Text Converter</h1>
-        
-        <div class="upload-section" id="dropZone">
-            <input type="file" id="audioFile" accept="audio/*" style="display: none">
-            <button class="button" onclick="document.getElementById('audioFile').click()">
-                Choose Audio File
-            </button>
-            <p>or drag and drop your audio file here</p>
-            <div class="status" id="fileStatus"></div>
-        </div>
+        <div class="card">
+            <h1>Speech to Text Converter</h1>
 
-        <div style="text-align: center;">
-            <button class="button" id="startTranscription" disabled>
-                Start Transcription
-            </button>
-            <button class="button" id="downloadText" disabled>
-                Download Text
-            </button>
-        </div>
+            <!-- API Configuration -->
+            <div class="config-form">
+                <div class="input-group">
+                    <label for="apiKey">Azure API Key</label>
+                    <input type="password" id="apiKey" placeholder="Enter your Azure API key">
+                </div>
+                <div class="input-group">
+                    <label for="region">Azure Region</label>
+                    <input type="text" id="region" placeholder="e.g., eastus">
+                </div>
+                <div class="input-group">
+                    <label for="language">Recognition Language</label>
+                    <select id="language">
+                        <option value="en-US">English (US)</option>
+                        <option value="es-ES">Spanish (Spain)</option>
+                        <option value="fr-FR">French (France)</option>
+                        <option value="de-DE">German (Germany)</option>
+                        <option value="it-IT">Italian (Italy)</option>
+                        <option value="ja-JP">Japanese (Japan)</option>
+                    </select>
+                </div>
+            </div>
 
-        <div class="progress" id="progressBar">
-            <div class="progress-bar" id="progressBarFill"></div>
-        </div>
+            <!-- Upload Zone -->
+            <div class="upload-zone" id="dropZone">
+                <input type="file" id="audioFile" accept="audio/*" style="display: none">
+                <i class="fas fa-cloud-upload-alt" style="font-size: 2rem; color: var(--primary); margin-bottom: 1rem;"></i>
+                <p>Drag and drop your audio file here or</p>
+                <button class="button button-secondary" onclick="document.getElementById('audioFile').click()">
+                    <i class="fas fa-file-audio"></i>
+                    Choose File
+                </button>
+                <div class="status" id="fileStatus"></div>
+            </div>
 
-        <div id="transcriptionOutput"></div>
+            <!-- Actions -->
+            <div class="actions">
+                <button class="button" id="startTranscription" disabled>
+                    <i class="fas fa-play"></i>
+                    Start Transcription
+                </button>
+                <button class="button button-secondary" id="downloadText" disabled>
+                    <i class="fas fa-download"></i>
+                    Download Text
+                </button>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressBarFill"></div>
+            </div>
+
+            <!-- Output -->
+            <div class="output-container">
+                <div class="output" id="transcriptionOutput"></div>
+                <button class="copy-button" id="copyButton" title="Copy to clipboard">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </div>
+        </div>
     </div>
 
-    <script>
-        // Azure Speech configuration
-        const speechConfig = SpeechSDK.SpeechConfig.fromSubscription("YOUR_AZURE_KEY", "YOUR_AZURE_REGION");
-        speechConfig.speechRecognitionLanguage = "en-US";
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">Copied to clipboard!</div>
 
+    <script>
         let audioFile = null;
         let transcriptionText = "";
 
         // DOM Elements
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('audioFile');
-        const fileStatus = document.getElementById('fileStatus');
-        const startButton = document.getElementById('startTranscription');
-        const downloadButton = document.getElementById('downloadText');
-        const outputDiv = document.getElementById('transcriptionOutput');
-        const progressBar = document.getElementById('progressBar');
-        const progressBarFill = document.getElementById('progressBarFill');
+        const elements = {
+            apiKey: document.getElementById('apiKey'),
+            region: document.getElementById('region'),
+            language: document.getElementById('language'),
+            dropZone: document.getElementById('dropZone'),
+            fileInput: document.getElementById('audioFile'),
+            fileStatus: document.getElementById('fileStatus'),
+            startButton: document.getElementById('startTranscription'),
+            downloadButton: document.getElementById('downloadText'),
+            outputDiv: document.getElementById('transcriptionOutput'),
+            progressBar: document.getElementById('progressBar'),
+            progressBarFill: document.getElementById('progressBarFill'),
+            copyButton: document.getElementById('copyButton'),
+            toast: document.getElementById('toast')
+        };
 
-        // Drag and drop handlers
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('drag-over');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('drag-over');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('drag-over');
-            handleFile(e.dataTransfer.files[0]);
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            handleFile(e.target.files[0]);
-        });
-
+        // File Handling
         function handleFile(file) {
             if (file && file.type.startsWith('audio/')) {
                 audioFile = file;
-                fileStatus.textContent = `Selected file: ${file.name}`;
-                startButton.disabled = false;
+                elements.fileStatus.textContent = `Selected: ${file.name}`;
+                elements.startButton.disabled = !validateConfig();
             } else {
-                fileStatus.textContent = 'Please select a valid audio file';
-                startButton.disabled = true;
+                elements.fileStatus.textContent = 'Please select a valid audio file';
+                elements.startButton.disabled = true;
             }
         }
 
-        startButton.addEventListener('click', async () => {
-            if (!audioFile) return;
+        // Drag and Drop
+        elements.dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            elements.dropZone.classList.add('drag-over');
+        });
+
+        elements.dropZone.addEventListener('dragleave', () => {
+            elements.dropZone.classList.remove('drag-over');
+        });
+
+        elements.dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            elements.dropZone.classList.remove('drag-over');
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        elements.fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
+
+        // Config Validation
+        function validateConfig() {
+            return elements.apiKey.value && 
+                   elements.region.value && 
+                   elements.language.value && 
+                   audioFile;
+        }
+
+        // Input Event Listeners
+        [elements.apiKey, elements.region, elements.language].forEach(input => {
+            input.addEventListener('input', () => {
+                elements.startButton.disabled = !validateConfig();
+            });
+        });
+
+        // Transcription
+        elements.startButton.addEventListener('click', async () => {
+            if (!validateConfig()) return;
 
             // Reset UI
-            outputDiv.textContent = '';
-            progressBar.style.display = 'block';
-            startButton.disabled = true;
-            downloadButton.disabled = true;
+            elements.outputDiv.textContent = '';
+            elements.progressBar.style.display = 'block';
+            elements.startButton.disabled = true;
+            elements.downloadButton.disabled = true;
             transcriptionText = '';
 
             try {
+                const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
+                    elements.apiKey.value,
+                    elements.region.value
+                );
+                speechConfig.speechRecognitionLanguage = elements.language.value;
+
                 const arrayBuffer = await audioFile.arrayBuffer();
                 const audioConfig = SpeechSDK.AudioConfig.fromWaveFileInput(arrayBuffer);
                 const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
@@ -200,31 +374,32 @@
                 recognizer.recognized = (s, e) => {
                     if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
                         transcriptionText += e.result.text + " ";
-                        outputDiv.textContent = transcriptionText;
-                        progressBarFill.style.width = '100%';
+                        elements.outputDiv.textContent = transcriptionText;
+                        elements.progressBarFill.style.width = '100%';
                     }
                 };
 
                 recognizer.recognizeOnceAsync(
                     result => {
                         if (result.text) {
-                            downloadButton.disabled = false;
+                            elements.downloadButton.disabled = false;
                         }
                         recognizer.close();
                     },
                     error => {
                         console.error(error);
-                        fileStatus.textContent = 'Error during transcription. Please try again.';
+                        elements.fileStatus.textContent = 'Transcription error. Please try again.';
                         recognizer.close();
                     }
                 );
             } catch (error) {
                 console.error(error);
-                fileStatus.textContent = 'Error processing audio file. Please try again.';
+                elements.fileStatus.textContent = 'Error processing file. Please try again.';
             }
         });
 
-        downloadButton.addEventListener('click', () => {
+        // Download Function
+        elements.downloadButton.addEventListener('click', () => {
             if (!transcriptionText) return;
 
             const blob = new Blob([transcriptionText], { type: 'text/plain' });
@@ -236,6 +411,18 @@
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
+        });
+
+        // Copy Function
+        elements.copyButton.addEventListener('click', () => {
+            if (!transcriptionText) return;
+
+            navigator.clipboard.writeText(transcriptionText).then(() => {
+                elements.toast.style.display = 'block';
+                setTimeout(() => {
+                    elements.toast.style.display = 'none';
+                }, 3000);
+            });
         });
     </script>
 </body>
