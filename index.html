@@ -209,6 +209,41 @@
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .file-info i {
+            font-size: 1.5rem;
+            color: var(--primary);
+        }
+
+        .conversion-status {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: #059669;
+        }
+
+        .error-message {
+            color: #dc2626;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+
+        .usage-info {
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
     </style>
 </head>
 <body>
@@ -221,10 +256,6 @@
                 <div class="input-group">
                     <label for="apiKey">Azure API Key</label>
                     <input type="password" id="apiKey" placeholder="Enter your Azure API key">
-                </div>
-                <div class="input-group">
-                    <label for="region">Azure Region</label>
-                    <input type="text" id="region" placeholder="e.g., eastus">
                 </div>
                 <div class="input-group">
                     <label for="language">Recognition Language</label>
@@ -241,14 +272,16 @@
 
             <!-- Upload Zone -->
             <div class="upload-zone" id="dropZone">
-                <input type="file" id="audioFile" accept="audio/*" style="display: none">
+                <input type="file" id="audioFile" accept="audio/*,video/mp4" style="display: none">
                 <i class="fas fa-cloud-upload-alt" style="font-size: 2rem; color: var(--primary); margin-bottom: 1rem;"></i>
-                <p>Drag and drop your audio file here or</p>
+                <p>Drag and drop your audio or video file here or</p>
                 <button class="button button-secondary" onclick="document.getElementById('audioFile').click()">
                     <i class="fas fa-file-audio"></i>
                     Choose File
                 </button>
                 <div class="status" id="fileStatus"></div>
+                <div id="conversionStatus" class="conversion-status"></div>
+                <div id="errorMessage" class="error-message"></div>
             </div>
 
             <!-- Actions -->
@@ -260,6 +293,10 @@
                 <button class="button button-secondary" id="downloadText" disabled>
                     <i class="fas fa-download"></i>
                     Download Text
+                </button>
+                <button class="button button-secondary" id="checkUsage">
+                    <i class="fas fa-chart-bar"></i>
+                    Check Usage
                 </button>
             </div>
 
@@ -275,6 +312,9 @@
                     <i class="fas fa-copy"></i>
                 </button>
             </div>
+
+            <!-- Usage Info -->
+            <div class="usage-info" id="usageInfo"></div>
         </div>
     </div>
 
@@ -284,33 +324,103 @@
     <script>
         let audioFile = null;
         let transcriptionText = "";
+        let isConverting = false;
+        let audioContext = null;
+
+        // Azure region (predefined)
+        const AZURE_REGION = 'eastus';
 
         // DOM Elements
         const elements = {
             apiKey: document.getElementById('apiKey'),
-            region: document.getElementById('region'),
             language: document.getElementById('language'),
             dropZone: document.getElementById('dropZone'),
             fileInput: document.getElementById('audioFile'),
             fileStatus: document.getElementById('fileStatus'),
             startButton: document.getElementById('startTranscription'),
             downloadButton: document.getElementById('downloadText'),
+            checkUsageButton: document.getElementById('checkUsage'),
             outputDiv: document.getElementById('transcriptionOutput'),
             progressBar: document.getElementById('progressBar'),
             progressBarFill: document.getElementById('progressBarFill'),
             copyButton: document.getElementById('copyButton'),
-            toast: document.getElementById('toast')
+            toast: document.getElementById('toast'),
+            conversionStatus: document.getElementById('conversionStatus'),
+            errorMessage: document.getElementById('errorMessage'),
+            usageInfo: document.getElementById('usageInfo')
         };
 
         // File Handling
-        function handleFile(file) {
-            if (file && file.type.startsWith('audio/')) {
+        async function handleFile(file) {
+            elements.errorMessage.textContent = '';
+            elements.conversionStatus.textContent = '';
+            
+            if (file.type.startsWith('audio/')) {
                 audioFile = file;
-                elements.fileStatus.textContent = `Selected: ${file.name}`;
+                elements.fileStatus.textContent = `Selected audio: ${file.name}`;
                 elements.startButton.disabled = !validateConfig();
-            } else {
-                elements.fileStatus.textContent = 'Please select a valid audio file';
+            } else if (file.type === 'video/mp4') {
+                elements.fileStatus.textContent = `Selected video: ${file.name}`;
                 elements.startButton.disabled = true;
+                isConverting = true;
+                await extractAudioFromVideo(file);
+                isConverting = false;
+            } else {
+                elements.fileStatus.textContent = 'Please select a valid audio or video file';
+                elements.startButton.disabled = true;
+            }
+        }
+
+        // Function to convert MP4 to AudioBuffer
+        async function extractAudioFromVideo(videoFile) {
+            try {
+                elements.conversionStatus.textContent = 'Converting video to audio...';
+                
+                const video = document.createElement('video');
+                const videoUrl = URL.createObjectURL(videoFile);
+                video.src = videoUrl;
+                
+                await new Promise((resolve) => {
+                    video.addEventListener('loadedmetadata', resolve);
+                });
+                
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const destination = audioContext.createMediaStreamDestination();
+                
+                const source = audioContext.createMediaElementSource(video);
+                source.connect(destination);
+                
+                video.play();
+                
+                const mediaRecorder = new MediaRecorder(destination.stream);
+                const audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+                    audioFile = audioBlob;
+                    elements.conversionStatus.textContent = 'Conversion completed successfully!';
+                    elements.startButton.disabled = !validateConfig();
+                    URL.revokeObjectURL(videoUrl);
+                };
+                
+                mediaRecorder.start();
+                
+                video.addEventListener('ended', () => {
+                    mediaRecorder.stop();
+                    video.remove();
+                });
+                
+                video.addEventListener('error', (error) => {
+                    throw new Error('Error processing video: ' + error.message);
+                });
+                
+            } catch (error) {
+                elements.errorMessage.textContent = 'Error converting video: ' + error.message;
+                console.error('Video conversion error:', error);
             }
         }
 
@@ -337,13 +447,13 @@
         // Config Validation
         function validateConfig() {
             return elements.apiKey.value && 
-                   elements.region.value && 
                    elements.language.value && 
-                   audioFile;
+                   audioFile &&
+                   !isConverting;
         }
 
         // Input Event Listeners
-        [elements.apiKey, elements.region, elements.language].forEach(input => {
+        [elements.apiKey, elements.language].forEach(input => {
             input.addEventListener('input', () => {
                 elements.startButton.disabled = !validateConfig();
             });
@@ -363,12 +473,21 @@
             try {
                 const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
                     elements.apiKey.value,
-                    elements.region.value
+                    AZURE_REGION
                 );
                 speechConfig.speechRecognitionLanguage = elements.language.value;
 
-                const arrayBuffer = await audioFile.arrayBuffer();
-                const audioConfig = SpeechSDK.AudioConfig.fromWaveFileInput(arrayBuffer);
+                let audioConfig;
+                if (audioFile.type === 'audio/mp3') {
+                    // For converted MP4 files
+                    const arrayBuffer = await audioFile.arrayBuffer();
+                    audioConfig = SpeechSDK.AudioConfig.fromWaveFileInput(arrayBuffer);
+                } else {
+                    // For original audio files
+                    const arrayBuffer = await audioFile.arrayBuffer();
+                    audioConfig = SpeechSDK.AudioConfig.fromWaveFileInput(arrayBuffer);
+                }
+
                 const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
 
                 recognizer.recognized = (s, e) => {
@@ -388,13 +507,13 @@
                     },
                     error => {
                         console.error(error);
-                        elements.fileStatus.textContent = 'Transcription error. Please try again.';
+                        elements.errorMessage.textContent = 'Transcription error. Please try again.';
                         recognizer.close();
                     }
                 );
             } catch (error) {
                 console.error(error);
-                elements.fileStatus.textContent = 'Error processing file. Please try again.';
+                elements.errorMessage.textContent = 'Error processing file. Please try again.';
             }
         });
 
@@ -423,6 +542,55 @@
                     elements.toast.style.display = 'none';
                 }, 3000);
             });
+        });
+
+        // Check Usage Function
+        elements.checkUsageButton.addEventListener('click', async () => {
+            if (!elements.apiKey.value) {
+                elements.usageInfo.textContent = 'Please enter your API key to check usage.';
+                return;
+            }
+
+            try {
+                const response = await fetch(`https://${AZURE_REGION}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`, {
+                    method: 'POST',
+                    headers: {
+                        'Ocp-Apim-Subscription-Key': elements.apiKey.value
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to authenticate');
+                }
+
+                const token = await response.text();
+
+                const usageResponse = await fetch(`https://${AZURE_REGION}.api.cognitive.microsoft.com/sts/v1.0/usage`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!usageResponse.ok) {
+                    throw new Error('Failed to fetch usage data');
+                }
+
+                const usageData = await usageResponse.json();
+                const remainingCalls = usageData.remaining || 'Unknown';
+                const totalCalls = usageData.total || 'Unknown';
+
+                elements.usageInfo.textContent = `Remaining calls: ${remainingCalls} / Total calls: ${totalCalls}`;
+            } catch (error) {
+                console.error('Error checking usage:', error);
+                elements.usageInfo.textContent = 'Error checking usage. Please try again later.';
+            }
+        });
+
+        // Cleanup function for audio context
+        window.addEventListener('beforeunload', () => {
+            if (audioContext) {
+                audioContext.close();
+            }
         });
     </script>
 </body>
