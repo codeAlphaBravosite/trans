@@ -7,6 +7,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100 min-h-screen">
+    <!-- Previous HTML remains the same until the script section -->
     <div class="container mx-auto px-4 py-8">
         <!-- Header -->
         <div class="text-center mb-8">
@@ -140,52 +141,70 @@
             progressText.textContent = 'Starting conversion...';
 
             try {
-                // Step 1: Create headers
-                const headers = {
-                    'Ocp-Apim-Subscription-Key': apiKey,
-                    'Content-Type': 'application/json'
-                };
+                // Step 1: Upload the audio file to Azure Blob Storage
+                progressText.textContent = 'Uploading audio file...';
+                progressBar.style.width = '20%';
+
+                // Convert audio file to FormData
+                const formData = new FormData();
+                formData.append('file', audioFile);
+
+                // Upload audio file
+                const uploadResponse = await fetch(`${ENDPOINT}speechtotext/v3.0/uploads`, {
+                    method: 'POST',
+                    headers: {
+                        'Ocp-Apim-Subscription-Key': apiKey
+                    },
+                    body: formData
+                });
+
+                if (!uploadResponse.ok) {
+                    throw new Error('Failed to upload audio file');
+                }
+
+                const uploadResult = await uploadResponse.json();
+                const audioUrl = uploadResult.self;
 
                 // Step 2: Create transcription
                 progressText.textContent = 'Initializing transcription...';
-                progressBar.style.width = '20%';
+                progressBar.style.width = '40%';
 
-                // Read file as base64
-                const base64Audio = await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                    reader.readAsDataURL(audioFile);
-                });
-
-                // Create transcription request
-                const response = await fetch(`${ENDPOINT}speechtotext/v3.0/transcriptions`, {
+                const transcriptionResponse = await fetch(`${ENDPOINT}speechtotext/v3.0/transcriptions`, {
                     method: 'POST',
-                    headers: headers,
+                    headers: {
+                        'Ocp-Apim-Subscription-Key': apiKey,
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({
-                        contentUrls: [`data:audio/wav;base64,${base64Audio}`],
+                        contentUrls: [audioUrl],
                         properties: {
-                            wordLevelTimestampsEnabled: true
+                            wordLevelTimestampsEnabled: true,
+                            diarizationEnabled: true
                         },
                         locale: language,
-                        displayName: 'Transcription_' + new Date().getTime()
+                        displayName: `Transcription_${new Date().getTime()}`
                     })
                 });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(`API Error: ${errorData.message || response.statusText}`);
+                if (!transcriptionResponse.ok) {
+                    const errorData = await transcriptionResponse.json();
+                    throw new Error(`API Error: ${errorData.error?.message || transcriptionResponse.statusText}`);
                 }
 
-                const transcription = await response.json();
-                
+                const transcription = await transcriptionResponse.json();
+
                 // Step 3: Poll for status
                 progressText.textContent = 'Processing audio...';
-                progressBar.style.width = '50%';
+                progressBar.style.width = '60%';
 
                 let status = 'NotStarted';
+                let statusUrl = transcription.self;
+
                 while (status !== 'Succeeded' && status !== 'Failed') {
-                    const statusResponse = await fetch(transcription.self, {
-                        headers: headers
+                    const statusResponse = await fetch(statusUrl, {
+                        headers: {
+                            'Ocp-Apim-Subscription-Key': apiKey
+                        }
                     });
 
                     if (!statusResponse.ok) {
@@ -196,7 +215,7 @@
                     status = statusData.status;
 
                     if (status === 'Running') {
-                        progressBar.style.width = '75%';
+                        progressBar.style.width = '80%';
                         progressText.textContent = 'Almost there...';
                     }
 
@@ -204,12 +223,17 @@
                         throw new Error('Transcription failed');
                     }
 
-                    await sleep(1000); // Poll every second
+                    await sleep(1000);
                 }
 
                 // Step 4: Get results
-                const filesResponse = await fetch(`${transcription.self}/files`, {
-                    headers: headers
+                progressBar.style.width = '90%';
+                progressText.textContent = 'Retrieving results...';
+
+                const filesResponse = await fetch(`${statusUrl}/files`, {
+                    headers: {
+                        'Ocp-Apim-Subscription-Key': apiKey
+                    }
                 });
 
                 if (!filesResponse.ok) {
@@ -230,8 +254,6 @@
                 }
 
                 const transcriptData = await transcriptResponse.json();
-                
-                // Extract combined text from all segments
                 const combinedText = transcriptData.combinedRecognizedPhrases[0].display;
 
                 // Update progress and display result
