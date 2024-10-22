@@ -49,7 +49,7 @@
                 <label class="block text-gray-700 text-sm font-bold mb-2" for="audioFile">
                     Upload Audio File (WAV format recommended)
                 </label>
-                <input type="file" id="audioFile" accept="audio/*"
+                <input type="file" id="audioFile" accept="audio/wav,audio/mp3,audio/ogg"
                     class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
             </div>
 
@@ -86,9 +86,8 @@
     </div>
 
     <script>
-        // Constants
         const ENDPOINT = 'https://centralindia.api.cognitive.microsoft.com/';
-        
+
         // Check for saved API key on load
         document.addEventListener('DOMContentLoaded', () => {
             const savedApiKey = localStorage.getItem('azureApiKey');
@@ -107,6 +106,9 @@
                 alert('Please enter an API Key');
             }
         }
+
+        // Sleep function for polling
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
         // Main conversion function
         async function convertSpeechToText() {
@@ -138,61 +140,104 @@
             progressText.textContent = 'Starting conversion...';
 
             try {
-                // First, get the access token
-                const tokenResponse = await fetch(`${ENDPOINT}sts/v1.0/issuetoken`, {
-                    method: 'POST',
-                    headers: {
-                        'Ocp-Apim-Subscription-Key': apiKey
-                    }
-                });
+                // Step 1: Create headers
+                const headers = {
+                    'Ocp-Apim-Subscription-Key': apiKey,
+                    'Content-Type': 'application/json'
+                };
 
-                if (!tokenResponse.ok) {
-                    throw new Error('Failed to get access token. Please check your API key.');
-                }
-
-                const accessToken = await tokenResponse.text();
-                
-                // Update progress
+                // Step 2: Create transcription
+                progressText.textContent = 'Initializing transcription...';
                 progressBar.style.width = '20%';
-                progressText.textContent = 'Uploading audio...';
 
-                // Prepare the audio file
-                const formData = new FormData();
-                formData.append('audio', audioFile);
-
-                // Call the speech-to-text API
-                const speechResponse = await fetch(
-                    `${ENDPOINT}speech/recognition/conversation/cognitiveservices/v1?language=${language}`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                        'Content-Type': `audio/${audioFile.name.split('.').pop()}` // Get file extension
-                    },
-                    body: await audioFile.arrayBuffer()
+                // Read file as base64
+                const base64Audio = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                    reader.readAsDataURL(audioFile);
                 });
 
-                if (!speechResponse.ok) {
-                    throw new Error('Speech recognition failed. Please try again.');
+                // Create transcription request
+                const response = await fetch(`${ENDPOINT}speechtotext/v3.0/transcriptions`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        contentUrls: [`data:audio/wav;base64,${base64Audio}`],
+                        properties: {
+                            wordLevelTimestampsEnabled: true
+                        },
+                        locale: language,
+                        displayName: 'Transcription_' + new Date().getTime()
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API Error: ${errorData.message || response.statusText}`);
                 }
 
-                // Update progress
-                progressBar.style.width = '60%';
+                const transcription = await response.json();
+                
+                // Step 3: Poll for status
                 progressText.textContent = 'Processing audio...';
+                progressBar.style.width = '50%';
 
-                const result = await speechResponse.json();
+                let status = 'NotStarted';
+                while (status !== 'Succeeded' && status !== 'Failed') {
+                    const statusResponse = await fetch(transcription.self, {
+                        headers: headers
+                    });
 
-                // Update progress
+                    if (!statusResponse.ok) {
+                        throw new Error('Failed to get transcription status');
+                    }
+
+                    const statusData = await statusResponse.json();
+                    status = statusData.status;
+
+                    if (status === 'Running') {
+                        progressBar.style.width = '75%';
+                        progressText.textContent = 'Almost there...';
+                    }
+
+                    if (status === 'Failed') {
+                        throw new Error('Transcription failed');
+                    }
+
+                    await sleep(1000); // Poll every second
+                }
+
+                // Step 4: Get results
+                const filesResponse = await fetch(`${transcription.self}/files`, {
+                    headers: headers
+                });
+
+                if (!filesResponse.ok) {
+                    throw new Error('Failed to get transcription files');
+                }
+
+                const files = await filesResponse.json();
+                const transcriptFile = files.values.find(f => f.kind === 'Transcription');
+
+                if (!transcriptFile) {
+                    throw new Error('No transcription file found');
+                }
+
+                // Step 5: Download transcript
+                const transcriptResponse = await fetch(transcriptFile.links.contentUrl);
+                if (!transcriptResponse.ok) {
+                    throw new Error('Failed to download transcript');
+                }
+
+                const transcriptData = await transcriptResponse.json();
+                
+                // Extract combined text from all segments
+                const combinedText = transcriptData.combinedRecognizedPhrases[0].display;
+
+                // Update progress and display result
                 progressBar.style.width = '100%';
                 progressText.textContent = 'Completed!';
-
-                // Display result
-                if (result.DisplayText || result.text) {
-                    resultArea.value = result.DisplayText || result.text;
-                } else if (result.RecognitionStatus === 'NoMatch') {
-                    resultArea.value = 'No speech could be recognized.';
-                } else {
-                    throw new Error('Unexpected response format from the API.');
-                }
+                resultArea.value = combinedText;
 
             } catch (error) {
                 console.error('Conversion error:', error);
