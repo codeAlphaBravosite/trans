@@ -3,15 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio/Video to Text Converter</title>
+    <title>Audio to Text Converter</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-    <!-- Azure Speech SDK -->
-    <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
 </head>
 <body class="bg-gray-100 min-h-screen py-8">
-    <div class="container mx-auto px-4">
-        <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6">
-            <h1 class="text-2xl font-bold text-center mb-6">Audio/Video to Text Converter</h1>
+    <div class="container mx-auto px-4 max-w-2xl">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold text-center mb-6">Audio to Text Converter</h1>
             
             <!-- API Key Input -->
             <div class="mb-6">
@@ -19,6 +17,7 @@
                 <input type="password" id="apiKey" 
                        class="w-full p-2 border rounded-md"
                        placeholder="Enter your Azure Speech API Key">
+                <p class="mt-1 text-sm text-gray-500">Your key will be saved locally for convenience</p>
             </div>
 
             <!-- Language Selection -->
@@ -32,44 +31,33 @@
 
             <!-- File Upload -->
             <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Upload Audio/Video File</label>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Upload Audio File (WAV format)</label>
                 <input type="file" id="audioFile" 
-                       accept="audio/*,video/*"
+                       accept="audio/wav"
                        class="w-full p-2 border rounded-md">
+                <p class="mt-1 text-sm text-gray-500">Only WAV files are supported</p>
             </div>
 
-            <!-- Controls -->
-            <div class="mb-6 flex space-x-4">
-                <button id="startButton" 
-                        class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 disabled:bg-gray-400"
+            <!-- Convert Button -->
+            <div class="mb-6">
+                <button id="convertBtn" 
+                        class="w-full bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 disabled:bg-gray-400"
                         disabled>
-                    Start Transcription
-                </button>
-                <button id="stopButton" 
-                        class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 hidden">
-                    Stop
+                    Convert to Text
                 </button>
             </div>
 
-            <!-- Progress Bar -->
-            <div id="progressContainer" class="mb-6 hidden">
-                <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
-                </div>
-                <p id="progressText" class="text-sm text-gray-600 mt-2 text-center"></p>
-            </div>
-
-            <!-- Status Message -->
-            <div id="statusContainer" class="mb-6 hidden">
-                <p id="statusMessage" class="text-center text-sm"></p>
+            <!-- Status -->
+            <div id="statusDiv" class="mb-6 hidden">
+                <p id="statusText" class="text-center text-sm"></p>
             </div>
 
             <!-- Results -->
-            <div id="resultsContainer" class="mb-6 hidden">
+            <div id="resultsDiv" class="mb-6 hidden">
                 <h3 class="font-semibold mb-2">Transcription:</h3>
                 <div id="transcriptionText" class="p-4 bg-gray-50 rounded-md min-h-[100px] whitespace-pre-wrap"></div>
-                <button id="downloadButton" 
-                        class="mt-4 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">
+                <button id="downloadBtn" 
+                        class="mt-4 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 w-full">
                     Download Transcription
                 </button>
             </div>
@@ -77,162 +65,132 @@
     </div>
 
     <script>
-        class SpeechToTextApp {
+        class AudioTranscriber {
             constructor() {
-                this.isTranscribing = false;
-                this.transcription = '';
-                this.recognizer = null;
-                this.initializeElements();
-                this.initializeEventListeners();
-                this.loadSavedApiKey();
+                this.endpoint = 'https://centralindia.api.cognitive.microsoft.com/';
+                this.initElements();
+                this.initEventListeners();
+                this.loadSavedKey();
             }
 
-            initializeElements() {
-                this.elements = {
-                    apiKey: document.getElementById('apiKey'),
-                    language: document.getElementById('language'),
-                    audioFile: document.getElementById('audioFile'),
-                    startButton: document.getElementById('startButton'),
-                    stopButton: document.getElementById('stopButton'),
-                    progressContainer: document.getElementById('progressContainer'),
-                    progressBar: document.getElementById('progressBar'),
-                    progressText: document.getElementById('progressText'),
-                    statusContainer: document.getElementById('statusContainer'),
-                    statusMessage: document.getElementById('statusMessage'),
-                    resultsContainer: document.getElementById('resultsContainer'),
-                    transcriptionText: document.getElementById('transcriptionText'),
-                    downloadButton: document.getElementById('downloadButton')
-                };
+            initElements() {
+                this.apiKeyInput = document.getElementById('apiKey');
+                this.languageSelect = document.getElementById('language');
+                this.audioFileInput = document.getElementById('audioFile');
+                this.convertBtn = document.getElementById('convertBtn');
+                this.statusDiv = document.getElementById('statusDiv');
+                this.statusText = document.getElementById('statusText');
+                this.resultsDiv = document.getElementById('resultsDiv');
+                this.transcriptionText = document.getElementById('transcriptionText');
+                this.downloadBtn = document.getElementById('downloadBtn');
             }
 
-            initializeEventListeners() {
-                this.elements.apiKey.addEventListener('input', () => {
-                    this.validateInputs();
-                    localStorage.setItem('azureApiKey', this.elements.apiKey.value);
+            initEventListeners() {
+                this.apiKeyInput.addEventListener('input', () => this.validateInputs());
+                this.audioFileInput.addEventListener('change', () => this.validateInputs());
+                this.convertBtn.addEventListener('click', () => this.startConversion());
+                this.downloadBtn.addEventListener('click', () => this.downloadTranscription());
+                
+                // Save API key when changed
+                this.apiKeyInput.addEventListener('change', () => {
+                    localStorage.setItem('azureApiKey', this.apiKeyInput.value);
                 });
-                this.elements.audioFile.addEventListener('change', () => this.validateInputs());
-                this.elements.startButton.addEventListener('click', () => this.startTranscription());
-                this.elements.stopButton.addEventListener('click', () => this.stopTranscription());
-                this.elements.downloadButton.addEventListener('click', () => this.downloadTranscription());
             }
 
-            loadSavedApiKey() {
+            loadSavedKey() {
                 const savedKey = localStorage.getItem('azureApiKey');
                 if (savedKey) {
-                    this.elements.apiKey.value = savedKey;
+                    this.apiKeyInput.value = savedKey;
                     this.validateInputs();
                 }
             }
 
             validateInputs() {
-                const hasKey = this.elements.apiKey.value.trim() !== '';
-                const hasFile = this.elements.audioFile.files.length > 0;
-                this.elements.startButton.disabled = !(hasKey && hasFile);
+                const hasKey = this.apiKeyInput.value.trim() !== '';
+                const hasFile = this.audioFileInput.files.length > 0;
+                this.convertBtn.disabled = !(hasKey && hasFile);
             }
 
             showStatus(message, isError = false) {
-                this.elements.statusContainer.classList.remove('hidden');
-                this.elements.statusMessage.textContent = message;
-                this.elements.statusMessage.className = `text-center text-sm ${isError ? 'text-red-500' : 'text-gray-600'}`;
+                this.statusDiv.classList.remove('hidden');
+                this.statusText.textContent = message;
+                this.statusText.className = `text-center text-sm ${isError ? 'text-red-500' : 'text-gray-600'}`;
             }
 
-            updateProgress(percent) {
-                this.elements.progressContainer.classList.remove('hidden');
-                this.elements.progressBar.style.width = `${percent}%`;
-                this.elements.progressText.textContent = `Processing: ${percent}%`;
-            }
-
-            async startTranscription() {
+            async startConversion() {
                 try {
-                    const file = this.elements.audioFile.files[0];
+                    const file = this.audioFileInput.files[0];
                     if (!file) {
                         this.showStatus('Please select a file', true);
                         return;
                     }
 
-                    this.isTranscribing = true;
-                    this.transcription = '';
-                    this.elements.startButton.classList.add('hidden');
-                    this.elements.stopButton.classList.remove('hidden');
-                    this.elements.resultsContainer.classList.add('hidden');
-                    this.updateProgress(0);
+                    this.convertBtn.disabled = true;
+                    this.resultsDiv.classList.add('hidden');
+                    this.showStatus('Converting audio to text...');
 
-                    const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
-                        this.elements.apiKey.value,
-                        'centralindia'
-                    );
-                    
-                    speechConfig.speechRecognitionLanguage = this.elements.language.value;
-                    speechConfig.endpointId = 'https://centralindia.api.cognitive.microsoft.com/';
-
-                    const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(file);
-                    this.recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
-
-                    this.recognizer.recognized = (s, e) => {
-                        if (e.result.text) {
-                            this.transcription += e.result.text + ' ';
-                            this.elements.transcriptionText.textContent = this.transcription;
-                            this.elements.resultsContainer.classList.remove('hidden');
+                    // First API call - start transcription
+                    const response = await fetch(`${this.endpoint}sts/v1.0/issuetoken`, {
+                        method: 'POST',
+                        headers: {
+                            'Ocp-Apim-Subscription-Key': this.apiKeyInput.value
                         }
-                    };
-
-                    this.recognizer.recognizing = (s, e) => {
-                        this.showStatus('Transcribing...');
-                        this.updateProgress(50); // Simple progress indication
-                    };
-
-                    await new Promise((resolve, reject) => {
-                        this.recognizer.startContinuousRecognitionAsync(
-                            () => {
-                                this.showStatus('Recognition started...');
-                            },
-                            error => {
-                                reject(error);
-                            }
-                        );
                     });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to get access token');
+                    }
+
+                    const token = await response.text();
+
+                    // Second API call - speech to text
+                    const speechResponse = await fetch(`${this.endpoint}speech/recognition/conversation/cognitiveservices/v1?language=${this.languageSelect.value}`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'audio/wav'
+                        },
+                        body: await file.arrayBuffer()
+                    });
+
+                    if (!speechResponse.ok) {
+                        throw new Error('Speech recognition failed');
+                    }
+
+                    const result = await speechResponse.json();
+                    
+                    if (result.RecognitionStatus === 'Success') {
+                        this.transcriptionText.textContent = result.DisplayText;
+                        this.resultsDiv.classList.remove('hidden');
+                        this.showStatus('Transcription completed successfully');
+                    } else {
+                        throw new Error('Recognition failed: ' + result.RecognitionStatus);
+                    }
 
                 } catch (error) {
                     this.showStatus(`Error: ${error.message}`, true);
-                    this.stopTranscription();
-                }
-            }
-
-            stopTranscription() {
-                if (this.recognizer) {
-                    this.recognizer.stopContinuousRecognitionAsync(
-                        () => {
-                            this.recognizer.close();
-                            this.recognizer = null;
-                            this.isTranscribing = false;
-                            this.elements.startButton.classList.remove('hidden');
-                            this.elements.stopButton.classList.add('hidden');
-                            this.updateProgress(100);
-                            this.showStatus('Transcription completed');
-                        },
-                        error => {
-                            this.showStatus(`Error stopping transcription: ${error}`, true);
-                        }
-                    );
+                } finally {
+                    this.convertBtn.disabled = false;
                 }
             }
 
             downloadTranscription() {
-                const blob = new Blob([this.transcription], { type: 'text/plain' });
-                const url = window.URL.createObjectURL(blob);
+                const text = this.transcriptionText.textContent;
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = 'transcription.txt';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
+                URL.revokeObjectURL(url);
             }
         }
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', () => {
-            new SpeechToTextApp();
+            new AudioTranscriber();
         });
     </script>
 </body>
