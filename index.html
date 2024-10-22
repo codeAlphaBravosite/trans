@@ -1,219 +1,224 @@
-// index.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Speech to Text Converter</title>
+    <title>Audio/Video to Text Converter</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-cognitiveservices-speech-sdk/1.32.0/microsoft.cognitiveservices.speech.sdk.bundle.js"></script>
+    <!-- Azure Speech SDK -->
+    <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
+<body class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4">
         <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6">
-            <h1 class="text-2xl font-bold text-center mb-8">Speech to Text Converter</h1>
+            <h1 class="text-2xl font-bold text-center mb-6">Audio/Video to Text Converter</h1>
             
-            <!-- Configuration Section -->
-            <div class="mb-6 p-4 bg-gray-50 rounded-lg">
-                <h2 class="text-lg font-semibold mb-4">Configuration</h2>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Azure Speech Key</label>
-                        <input type="password" id="speechKey" 
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border"
-                               placeholder="Enter your Azure Speech Key">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Azure Region</label>
-                        <input type="text" id="speechRegion" 
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border"
-                               placeholder="e.g., eastus">
-                    </div>
-                </div>
-            </div>
-
-            <!-- File Upload Section -->
+            <!-- API Key Input -->
             <div class="mb-6">
-                <div class="flex items-center justify-center w-full">
-                    <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                        <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                            <svg class="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
-                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
-                            </svg>
-                            <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Click to upload</span> or drag and drop</p>
-                            <p class="text-xs text-gray-500">WAV, MP3, or MP4 file (max. 100MB)</p>
-                        </div>
-                        <input type="file" id="audioFile" class="hidden" accept="audio/*,video/*" />
-                    </label>
-                </div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Azure Speech API Key</label>
+                <input type="password" id="apiKey" 
+                       class="w-full p-2 border rounded-md"
+                       placeholder="Enter your Azure Speech API Key">
             </div>
 
-            <!-- Progress Section -->
-            <div id="progressSection" class="mb-6 hidden">
+            <!-- Language Selection -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Select Language</label>
+                <select id="language" class="w-full p-2 border rounded-md">
+                    <option value="en-IN">English (India)</option>
+                    <option value="hi-IN">Hindi</option>
+                </select>
+            </div>
+
+            <!-- File Upload -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Upload Audio/Video File</label>
+                <input type="file" id="audioFile" 
+                       accept="audio/*,video/*"
+                       class="w-full p-2 border rounded-md">
+            </div>
+
+            <!-- Controls -->
+            <div class="mb-6 flex space-x-4">
+                <button id="startButton" 
+                        class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 disabled:bg-gray-400"
+                        disabled>
+                    Start Transcription
+                </button>
+                <button id="stopButton" 
+                        class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 hidden">
+                    Stop
+                </button>
+            </div>
+
+            <!-- Progress Bar -->
+            <div id="progressContainer" class="mb-6 hidden">
                 <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
-                <p id="progressText" class="text-sm text-gray-600 mt-2 text-center">Processing: 0%</p>
+                <p id="progressText" class="text-sm text-gray-600 mt-2 text-center"></p>
             </div>
 
-            <!-- Error Section -->
-            <div id="errorSection" class="mb-6 hidden">
-                <div class="p-4 text-red-700 bg-red-100 rounded-md">
-                    <p id="errorText"></p>
-                </div>
+            <!-- Status Message -->
+            <div id="statusContainer" class="mb-6 hidden">
+                <p id="statusMessage" class="text-center text-sm"></p>
             </div>
 
-            <!-- Results Section -->
-            <div id="resultsSection" class="mb-6 hidden">
-                <div class="p-4 bg-gray-50 rounded-md">
-                    <h3 class="font-semibold mb-2">Transcription:</h3>
-                    <div id="transcriptionText" class="whitespace-pre-wrap"></div>
-                    <button id="downloadBtn" 
-                            class="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
-                        Download Transcription
-                    </button>
-                </div>
+            <!-- Results -->
+            <div id="resultsContainer" class="mb-6 hidden">
+                <h3 class="font-semibold mb-2">Transcription:</h3>
+                <div id="transcriptionText" class="p-4 bg-gray-50 rounded-md min-h-[100px] whitespace-pre-wrap"></div>
+                <button id="downloadButton" 
+                        class="mt-4 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">
+                    Download Transcription
+                </button>
             </div>
         </div>
     </div>
 
     <script>
-        class SpeechToTextConverter {
+        class SpeechToTextApp {
             constructor() {
-                this.init();
+                this.isTranscribing = false;
+                this.transcription = '';
+                this.recognizer = null;
+                this.initializeElements();
+                this.initializeEventListeners();
+                this.loadSavedApiKey();
             }
 
-            init() {
-                // Initialize elements
+            initializeElements() {
                 this.elements = {
-                    speechKey: document.getElementById('speechKey'),
-                    speechRegion: document.getElementById('speechRegion'),
+                    apiKey: document.getElementById('apiKey'),
+                    language: document.getElementById('language'),
                     audioFile: document.getElementById('audioFile'),
-                    progressSection: document.getElementById('progressSection'),
+                    startButton: document.getElementById('startButton'),
+                    stopButton: document.getElementById('stopButton'),
+                    progressContainer: document.getElementById('progressContainer'),
                     progressBar: document.getElementById('progressBar'),
                     progressText: document.getElementById('progressText'),
-                    errorSection: document.getElementById('errorSection'),
-                    errorText: document.getElementById('errorText'),
-                    resultsSection: document.getElementById('resultsSection'),
+                    statusContainer: document.getElementById('statusContainer'),
+                    statusMessage: document.getElementById('statusMessage'),
+                    resultsContainer: document.getElementById('resultsContainer'),
                     transcriptionText: document.getElementById('transcriptionText'),
-                    downloadBtn: document.getElementById('downloadBtn')
+                    downloadButton: document.getElementById('downloadButton')
                 };
-
-                // Load saved configuration
-                this.loadConfig();
-
-                // Bind events
-                this.elements.audioFile.addEventListener('change', this.handleFileSelect.bind(this));
-                this.elements.downloadBtn.addEventListener('click', this.downloadTranscription.bind(this));
-                this.elements.speechKey.addEventListener('change', this.saveConfig.bind(this));
-                this.elements.speechRegion.addEventListener('change', this.saveConfig.bind(this));
             }
 
-            loadConfig() {
-                const savedKey = localStorage.getItem('azureSpeechKey');
-                const savedRegion = localStorage.getItem('azureRegion');
-                if (savedKey) this.elements.speechKey.value = savedKey;
-                if (savedRegion) this.elements.speechRegion.value = savedRegion;
+            initializeEventListeners() {
+                this.elements.apiKey.addEventListener('input', () => {
+                    this.validateInputs();
+                    localStorage.setItem('azureApiKey', this.elements.apiKey.value);
+                });
+                this.elements.audioFile.addEventListener('change', () => this.validateInputs());
+                this.elements.startButton.addEventListener('click', () => this.startTranscription());
+                this.elements.stopButton.addEventListener('click', () => this.stopTranscription());
+                this.elements.downloadButton.addEventListener('click', () => this.downloadTranscription());
             }
 
-            saveConfig() {
-                localStorage.setItem('azureSpeechKey', this.elements.speechKey.value);
-                localStorage.setItem('azureRegion', this.elements.speechRegion.value);
+            loadSavedApiKey() {
+                const savedKey = localStorage.getItem('azureApiKey');
+                if (savedKey) {
+                    this.elements.apiKey.value = savedKey;
+                    this.validateInputs();
+                }
             }
 
-            showError(message) {
-                this.elements.errorSection.classList.remove('hidden');
-                this.elements.errorText.textContent = message;
+            validateInputs() {
+                const hasKey = this.elements.apiKey.value.trim() !== '';
+                const hasFile = this.elements.audioFile.files.length > 0;
+                this.elements.startButton.disabled = !(hasKey && hasFile);
+            }
+
+            showStatus(message, isError = false) {
+                this.elements.statusContainer.classList.remove('hidden');
+                this.elements.statusMessage.textContent = message;
+                this.elements.statusMessage.className = `text-center text-sm ${isError ? 'text-red-500' : 'text-gray-600'}`;
             }
 
             updateProgress(percent) {
-                this.elements.progressSection.classList.remove('hidden');
+                this.elements.progressContainer.classList.remove('hidden');
                 this.elements.progressBar.style.width = `${percent}%`;
                 this.elements.progressText.textContent = `Processing: ${percent}%`;
             }
 
-            async handleFileSelect(event) {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                // Validate configuration
-                const speechKey = this.elements.speechKey.value;
-                const speechRegion = this.elements.speechRegion.value;
-
-                if (!speechKey || !speechRegion) {
-                    this.showError('Please enter your Azure Speech Key and Region');
-                    return;
-                }
-
-                // Reset UI
-                this.elements.errorSection.classList.add('hidden');
-                this.elements.resultsSection.classList.add('hidden');
-                this.updateProgress(0);
-
+            async startTranscription() {
                 try {
-                    // Create speech config
-                    const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(speechKey, speechRegion);
-                    speechConfig.speechRecognitionLanguage = 'en-US';
+                    const file = this.elements.audioFile.files[0];
+                    if (!file) {
+                        this.showStatus('Please select a file', true);
+                        return;
+                    }
 
-                    // Convert file to array buffer
-                    const arrayBuffer = await file.arrayBuffer();
-                    const audioData = new Uint8Array(arrayBuffer);
+                    this.isTranscribing = true;
+                    this.transcription = '';
+                    this.elements.startButton.classList.add('hidden');
+                    this.elements.stopButton.classList.remove('hidden');
+                    this.elements.resultsContainer.classList.add('hidden');
+                    this.updateProgress(0);
 
-                    // Create audio config
-                    const pushStream = SpeechSDK.AudioInputStream.createPushStream();
-                    const audioConfig = SpeechSDK.AudioConfig.fromStreamInput(pushStream);
+                    const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
+                        this.elements.apiKey.value,
+                        'centralindia'
+                    );
                     
-                    // Create recognizer
-                    const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
-                    
-                    let transcription = '';
-                    let processedChunks = 0;
-                    const totalChunks = Math.ceil(audioData.length / 32000);
+                    speechConfig.speechRecognitionLanguage = this.elements.language.value;
+                    speechConfig.endpointId = 'https://centralindia.api.cognitive.microsoft.com/';
 
-                    // Handle recognition events
-                    recognizer.recognized = (s, e) => {
+                    const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(file);
+                    this.recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+                    this.recognizer.recognized = (s, e) => {
                         if (e.result.text) {
-                            transcription += e.result.text + ' ';
-                            processedChunks++;
-                            const progress = Math.min(Math.round((processedChunks / totalChunks) * 100), 99);
-                            this.updateProgress(progress);
+                            this.transcription += e.result.text + ' ';
+                            this.elements.transcriptionText.textContent = this.transcription;
+                            this.elements.resultsContainer.classList.remove('hidden');
                         }
                     };
 
-                    // Push audio data in chunks
-                    const chunkSize = 32000;
-                    for (let i = 0; i < audioData.length; i += chunkSize) {
-                        const chunk = audioData.slice(i, i + chunkSize);
-                        pushStream.write(chunk);
-                    }
-                    pushStream.close();
+                    this.recognizer.recognizing = (s, e) => {
+                        this.showStatus('Transcribing...');
+                        this.updateProgress(50); // Simple progress indication
+                    };
 
-                    // Start recognition
                     await new Promise((resolve, reject) => {
-                        recognizer.recognizeOnceAsync(
-                            result => {
-                                this.updateProgress(100);
-                                this.elements.transcriptionText.textContent = transcription.trim();
-                                this.elements.resultsSection.classList.remove('hidden');
-                                recognizer.close();
-                                resolve();
+                        this.recognizer.startContinuousRecognitionAsync(
+                            () => {
+                                this.showStatus('Recognition started...');
                             },
                             error => {
-                                recognizer.close();
                                 reject(error);
                             }
                         );
                     });
 
                 } catch (error) {
-                    console.error('Recognition error:', error);
-                    this.showError('Error during transcription. Please try again.');
+                    this.showStatus(`Error: ${error.message}`, true);
+                    this.stopTranscription();
+                }
+            }
+
+            stopTranscription() {
+                if (this.recognizer) {
+                    this.recognizer.stopContinuousRecognitionAsync(
+                        () => {
+                            this.recognizer.close();
+                            this.recognizer = null;
+                            this.isTranscribing = false;
+                            this.elements.startButton.classList.remove('hidden');
+                            this.elements.stopButton.classList.add('hidden');
+                            this.updateProgress(100);
+                            this.showStatus('Transcription completed');
+                        },
+                        error => {
+                            this.showStatus(`Error stopping transcription: ${error}`, true);
+                        }
+                    );
                 }
             }
 
             downloadTranscription() {
-                const text = this.elements.transcriptionText.textContent;
-                const blob = new Blob([text], { type: 'text/plain' });
+                const blob = new Blob([this.transcription], { type: 'text/plain' });
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -225,8 +230,10 @@
             }
         }
 
-        // Initialize the app
-        new SpeechToTextConverter();
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            new SpeechToTextApp();
+        });
     </script>
 </body>
-  </html>
+</html>
