@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio to Text Converter</title>
+    <title>Azure Speech to Text Converter</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js"></script>
@@ -14,68 +14,75 @@
         <div class="text-center mb-12">
             <div class="flex items-center justify-center mb-4">
                 <i class="fas fa-microphone text-4xl text-indigo-600 mr-3"></i>
-                <h1 class="text-4xl font-bold text-gray-800">Audio to Text</h1>
+                <h1 class="text-4xl font-bold text-gray-800">Speech to Text</h1>
             </div>
-            <p class="text-indigo-600 font-medium">Powered by Nothing</p>
+            <p class="text-indigo-600 font-medium">Powered by Azure Cognitive Services</p>
         </div>
 
-        <div class="grid gap-6 md:grid-cols-2">
+        <!-- Main Conversion Panel -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Language and File Upload Section -->
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-800 mb-6 flex items-center">
+                        <i class="fas fa-language text-indigo-600 mr-2"></i>
+                        Input Settings
+                    </h2>
 
-            <!-- Conversion Panel -->
-            <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-[1.02] transition-transform duration-300">
-                <h2 class="text-xl font-semibold text-gray-800 mb-6 flex items-center">
-                    <i class="fas fa-language text-indigo-600 mr-2"></i>
-                    Conversion
-                </h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-gray-700 text-sm font-medium mb-2" for="language">
+                                Language
+                            </label>
+                            <select id="language" 
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300">
+                                <option value="en-US">English (US)</option>
+                                <option value="hi-IN">Hindi</option>
+                                <option value="es-ES">Spanish</option>
+                                <option value="fr-FR">French</option>
+                                <option value="de-DE">German</option>
+                                <option value="ja-JP">Japanese</option>
+                            </select>
+                        </div>
 
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-gray-700 text-sm font-medium mb-2" for="language">
-                            Language
-                        </label>
-                        <select id="language" 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300">
-                            <option value="en-US">English (US)</option>
-                            <option value="hi-IN">Hindi</option>
-                            <option value="es-ES">Spanish</option>
-                            <option value="fr-FR">French</option>
-                            <option value="de-DE">German</option>
-                            <option value="ja-JP">Japanese</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-gray-700 text-sm font-medium mb-2" for="audioFile">
-                            Audio File
-                        </label>
-                        <div class="relative">
-                            <input type="file" id="audioFile" accept="audio/wav,audio/mp3,audio/ogg"
-                                class="hidden" onchange="updateFileName()">
-                            <button onclick="document.getElementById('audioFile').click()" 
-                                class="w-full px-4 py-2 border-2 border-dashed border-indigo-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition-all duration-300 flex items-center justify-center">
-                                <i class="fas fa-cloud-upload-alt mr-2"></i>
-                                <span id="fileName">Choose Audio File</span>
-                            </button>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-medium mb-2" for="audioFile">
+                                Audio File
+                            </label>
+                            <div class="relative">
+                                <input type="file" id="audioFile" accept="audio/wav,audio/mp3,audio/ogg"
+                                    class="hidden" onchange="updateFileName()">
+                                <button onclick="document.getElementById('audioFile').click()" 
+                                    class="w-full px-4 py-2 border-2 border-dashed border-indigo-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition-all duration-300 flex items-center justify-center">
+                                    <i class="fas fa-cloud-upload-alt mr-2"></i>
+                                    <span id="fileName">Choose Audio File</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Conversion Controls -->
-        <div class="mt-6 bg-white rounded-xl shadow-lg p-6">
-            <button onclick="convertSpeechToText()" id="convertButton"
-                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center">
-                <i class="fas fa-sync-alt mr-2"></i>
-                Convert to Text
-            </button>
+                <!-- Conversion Button and Progress -->
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-800 mb-6 flex items-center">
+                        <i class="fas fa-sync-alt text-indigo-600 mr-2"></i>
+                        Convert
+                    </h2>
 
-            <!-- Progress Bar -->
-            <div id="progressContainer" class="hidden mt-6">
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                    <div id="progressBar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    <button onclick="convertSpeechToText()" id="convertButton"
+                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center mb-4">
+                        <i class="fas fa-sync-alt mr-2"></i>
+                        Convert to Text
+                    </button>
+
+                    <!-- Progress Bar -->
+                    <div id="progressContainer" class="hidden">
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="progressBar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <p id="progressText" class="text-sm text-gray-600 mt-2 text-center"></p>
+                    </div>
                 </div>
-                <p id="progressText" class="text-sm text-gray-600 mt-2 text-center"></p>
             </div>
 
             <!-- Result Section -->
@@ -108,24 +115,28 @@
                 </button>
             </div>
         </div>
-    </div>
 
-    <!-- Settings Panel -->
-            <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-[1.02] transition-transform duration-300">
-                <h2 class="text-xl font-semibold text-gray-800 mb-6 flex items-center">
+        <!-- Configuration Panel (Collapsible) -->
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+            <button onclick="toggleConfig()" 
+                class="w-full px-6 py-4 text-left font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none flex items-center justify-between">
+                <div class="flex items-center">
                     <i class="fas fa-cog text-indigo-600 mr-2"></i>
-                    Configuration
-                </h2>
-                
+                    API Configuration
+                </div>
+                <i id="configArrow" class="fas fa-chevron-down transition-transform duration-300"></i>
+            </button>
+            
+            <div id="configPanel" class="hidden px-6 pb-6">
                 <div class="space-y-4">
                     <div>
                         <label class="block text-gray-700 text-sm font-medium mb-2" for="apiKey">
-                            Key
+                            Azure API Key
                         </label>
                         <div class="relative">
                             <input type="password" id="apiKey" 
                                 class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
-                                placeholder="Enter your Key">
+                                placeholder="Enter your Azure API Key">
                             <button onclick="togglePassword()" 
                                 class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-indigo-600">
                                 <i class="fas fa-eye"></i>
@@ -135,7 +146,7 @@
 
                     <div>
                         <label class="block text-gray-700 text-sm font-medium mb-2" for="region">
-                            Region
+                            Azure Region
                         </label>
                         <input type="text" id="region" 
                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
@@ -149,9 +160,37 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
 
     <script>
         // Existing functions remain the same
+
+        // Add new function for configuration panel toggle
+        function toggleConfig() {
+            const configPanel = document.getElementById('configPanel');
+            const configArrow = document.getElementById('configArrow');
+            configPanel.classList.toggle('hidden');
+            configArrow.style.transform = configPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+
+        // Check for saved API key on load and show config panel if not set
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedApiKey = localStorage.getItem('azureApiKey');
+            const savedRegion = localStorage.getItem('azureRegion');
+            
+            if (savedApiKey) {
+                document.getElementById('apiKey').value = savedApiKey;
+            } else {
+                // Show config panel if API key is not set
+                toggleConfig();
+            }
+            
+            if (savedRegion) {
+                document.getElementById('region').value = savedRegion;
+            }
+        });
+        
         document.addEventListener('DOMContentLoaded', () => {
             const savedApiKey = localStorage.getItem('azureApiKey');
             const savedRegion = localStorage.getItem('azureRegion');
@@ -325,4 +364,4 @@
         }
     </script>
 </body>
-</html>
+    </html>
