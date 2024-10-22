@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Azure Speech to Text Converter</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <!-- Updated SDK URL and adding microsoft namespace -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-cognitiveservices-speech-sdk/1.32.0/microsoft.cognitiveservices.speech.sdk.bundle.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -55,7 +56,7 @@
             </div>
 
             <!-- Convert Button -->
-            <button onclick="convertSpeechToText()" 
+            <button onclick="convertSpeechToText()" id="convertButton"
                 class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline mb-4">
                 Convert to Text
             </button>
@@ -87,8 +88,20 @@
     </div>
 
     <script>
-        // Check for saved API key on page load
+        // Global variable for SDK
+        let SpeechSDK;
+
+        // Initialize the SDK when the page loads
         document.addEventListener('DOMContentLoaded', () => {
+            if (window.SpeechSDK) {
+                SpeechSDK = window.SpeechSDK;
+                console.log('Speech SDK initialized');
+            } else {
+                console.error('Speech SDK not found! Please check your internet connection.');
+                alert('Failed to load Speech SDK. Please refresh the page or check your internet connection.');
+            }
+
+            // Check for saved API key
             const savedApiKey = localStorage.getItem('azureApiKey');
             if (savedApiKey) {
                 document.getElementById('apiKey').value = savedApiKey;
@@ -106,8 +119,23 @@
             }
         }
 
+        // Function to read file as array buffer
+        function readFileAsArrayBuffer(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
         // Main conversion function
         async function convertSpeechToText() {
+            if (!SpeechSDK) {
+                alert('Speech SDK is not initialized. Please refresh the page.');
+                return;
+            }
+
             const apiKey = document.getElementById('apiKey').value;
             const audioFile = document.getElementById('audioFile').files[0];
             const language = document.getElementById('language').value;
@@ -115,6 +143,7 @@
             const progressContainer = document.getElementById('progressContainer');
             const progressBar = document.getElementById('progressBar');
             const progressText = document.getElementById('progressText');
+            const convertButton = document.getElementById('convertButton');
 
             if (!apiKey) {
                 alert('Please enter your Azure API Key');
@@ -126,7 +155,9 @@
                 return;
             }
 
-            // Show progress bar
+            // Disable convert button and show progress
+            convertButton.disabled = true;
+            convertButton.classList.add('opacity-50');
             progressContainer.classList.remove('hidden');
             resultArea.value = '';
             progressBar.style.width = '0%';
@@ -137,8 +168,19 @@
                 const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(apiKey, "centralindia");
                 speechConfig.speechRecognitionLanguage = language;
 
-                // Create audio config from file
-                const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(audioFile);
+                // Read file as array buffer
+                const arrayBuffer = await readFileAsArrayBuffer(audioFile);
+                
+                // Create push audio input stream
+                const audioStream = SpeechSDK.AudioInputStream.createPushStream();
+                
+                // Push audio data to stream
+                const chunk = new Uint8Array(arrayBuffer);
+                audioStream.write(chunk);
+                audioStream.close();
+
+                // Create audio config from stream
+                const audioConfig = SpeechSDK.AudioConfig.fromStreamInput(audioStream);
 
                 // Create speech recognizer
                 const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
@@ -162,21 +204,31 @@
                 await new Promise((resolve, reject) => {
                     recognizer.recognizeOnceAsync(
                         result => {
+                            if (result.text) {
+                                transcribedText = result.text;
+                                resultArea.value = transcribedText;
+                            }
                             progressBar.style.width = '100%';
                             progressText.textContent = 'Completed!';
                             resolve(result);
                         },
                         error => {
+                            console.error('Recognition error:', error);
                             progressContainer.classList.add('hidden');
-                            alert(`Error: ${error}`);
+                            alert(`Error during recognition: ${error}`);
                             reject(error);
                         }
                     );
                 });
 
             } catch (error) {
+                console.error('Conversion error:', error);
                 progressContainer.classList.add('hidden');
                 alert(`Error: ${error.message}`);
+            } finally {
+                // Re-enable convert button
+                convertButton.disabled = false;
+                convertButton.classList.remove('opacity-50');
             }
         }
 
