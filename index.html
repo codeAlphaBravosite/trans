@@ -1,197 +1,107 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio to Text Converter</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio/Video to Text Transcription</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+
+    h1 {
+      color: #333;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #fff;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+
+    input[type="text"], select, input[type="file"], button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 20px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    button {
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    #loading {
+      display: none;
+      margin-top: 20px;
+      font-weight: bold;
+      color: #ff6347;
+      text-align: center;
+    }
+
+    #transcription {
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      background-color: #f9f9f9;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen py-8">
-    <div class="container mx-auto px-4 max-w-2xl">
-        <div class="bg-white rounded-lg shadow-lg p-6">
-            <h1 class="text-2xl font-bold text-center mb-6">Audio to Text Converter</h1>
-            
-            <!-- API Key Input -->
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Azure Speech API Key</label>
-                <input type="password" id="apiKey" 
-                       class="w-full p-2 border rounded-md"
-                       placeholder="Enter your Azure Speech API Key">
-                <p class="mt-1 text-sm text-gray-500">Your key will be saved locally for convenience</p>
-            </div>
+<body>
+  <div class="container">
+    <h1>Transcribe Audio/Video to Text</h1>
 
-            <!-- Language Selection -->
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Select Language</label>
-                <select id="language" class="w-full p-2 border rounded-md">
-                    <option value="en-IN">English (India)</option>
-                    <option value="hi-IN">Hindi</option>
-                </select>
-            </div>
+    <!-- API Key Input -->
+    <label for="apiKey">Azure Speech API Key</label>
+    <input type="text" id="apiKey" placeholder="Paste your API Key here" required>
 
-            <!-- File Upload -->
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Upload Audio File (WAV format)</label>
-                <input type="file" id="audioFile" 
-                       accept="audio/wav"
-                       class="w-full p-2 border rounded-md">
-                <p class="mt-1 text-sm text-gray-500">Only WAV files are supported</p>
-            </div>
+    <!-- Language Selection -->
+    <label for="language">Select Language</label>
+    <select id="language">
+      <option value="en-US" selected>English (US)</option>
+      <option value="hi-IN">Hindi (India)</option>
+    </select>
 
-            <!-- Convert Button -->
-            <div class="mb-6">
-                <button id="convertBtn" 
-                        class="w-full bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 disabled:bg-gray-400"
-                        disabled>
-                    Convert to Text
-                </button>
-            </div>
+    <!-- File Upload -->
+    <label for="audioFile">Upload Audio/Video File</label>
+    <input type="file" id="audioFile" accept="audio/*,video/*" required>
 
-            <!-- Status -->
-            <div id="statusDiv" class="mb-6 hidden">
-                <p id="statusText" class="text-center text-sm"></p>
-            </div>
+    <!-- Transcribe Button -->
+    <button id="transcribeBtn">Start Transcription</button>
 
-            <!-- Results -->
-            <div id="resultsDiv" class="mb-6 hidden">
-                <h3 class="font-semibold mb-2">Transcription:</h3>
-                <div id="transcriptionText" class="p-4 bg-gray-50 rounded-md min-h-[100px] whitespace-pre-wrap"></div>
-                <button id="downloadBtn" 
-                        class="mt-4 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 w-full">
-                    Download Transcription
-                </button>
-            </div>
-        </div>
+    <!-- Loading Spinner -->
+    <p id="loading">Transcribing... Please wait.</p>
+
+    <!-- Transcription Result -->
+    <div id="transcription" class="hidden">
+      <h2>Transcription Result:</h2>
+      <p id="resultText"></p>
     </div>
+  </div>
 
-    <script>
-        class AudioTranscriber {
-            constructor() {
-                this.endpoint = 'https://centralindia.api.cognitive.microsoft.com/';
-                this.initElements();
-                this.initEventListeners();
-                this.loadSavedKey();
-            }
-
-            initElements() {
-                this.apiKeyInput = document.getElementById('apiKey');
-                this.languageSelect = document.getElementById('language');
-                this.audioFileInput = document.getElementById('audioFile');
-                this.convertBtn = document.getElementById('convertBtn');
-                this.statusDiv = document.getElementById('statusDiv');
-                this.statusText = document.getElementById('statusText');
-                this.resultsDiv = document.getElementById('resultsDiv');
-                this.transcriptionText = document.getElementById('transcriptionText');
-                this.downloadBtn = document.getElementById('downloadBtn');
-            }
-
-            initEventListeners() {
-                this.apiKeyInput.addEventListener('input', () => this.validateInputs());
-                this.audioFileInput.addEventListener('change', () => this.validateInputs());
-                this.convertBtn.addEventListener('click', () => this.startConversion());
-                this.downloadBtn.addEventListener('click', () => this.downloadTranscription());
-                
-                // Save API key when changed
-                this.apiKeyInput.addEventListener('change', () => {
-                    localStorage.setItem('azureApiKey', this.apiKeyInput.value);
-                });
-            }
-
-            loadSavedKey() {
-                const savedKey = localStorage.getItem('azureApiKey');
-                if (savedKey) {
-                    this.apiKeyInput.value = savedKey;
-                    this.validateInputs();
-                }
-            }
-
-            validateInputs() {
-                const hasKey = this.apiKeyInput.value.trim() !== '';
-                const hasFile = this.audioFileInput.files.length > 0;
-                this.convertBtn.disabled = !(hasKey && hasFile);
-            }
-
-            showStatus(message, isError = false) {
-                this.statusDiv.classList.remove('hidden');
-                this.statusText.textContent = message;
-                this.statusText.className = `text-center text-sm ${isError ? 'text-red-500' : 'text-gray-600'}`;
-            }
-
-            async startConversion() {
-                try {
-                    const file = this.audioFileInput.files[0];
-                    if (!file) {
-                        this.showStatus('Please select a file', true);
-                        return;
-                    }
-
-                    this.convertBtn.disabled = true;
-                    this.resultsDiv.classList.add('hidden');
-                    this.showStatus('Converting audio to text...');
-
-                    // First API call - start transcription
-                    const response = await fetch(`${this.endpoint}sts/v1.0/issuetoken`, {
-                        method: 'POST',
-                        headers: {
-                            'Ocp-Apim-Subscription-Key': this.apiKeyInput.value
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Failed to get access token');
-                    }
-
-                    const token = await response.text();
-
-                    // Second API call - speech to text
-                    const speechResponse = await fetch(`${this.endpoint}speech/recognition/conversation/cognitiveservices/v1?language=${this.languageSelect.value}`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'audio/wav'
-                        },
-                        body: await file.arrayBuffer()
-                    });
-
-                    if (!speechResponse.ok) {
-                        throw new Error('Speech recognition failed');
-                    }
-
-                    const result = await speechResponse.json();
-                    
-                    if (result.RecognitionStatus === 'Success') {
-                        this.transcriptionText.textContent = result.DisplayText;
-                        this.resultsDiv.classList.remove('hidden');
-                        this.showStatus('Transcription completed successfully');
-                    } else {
-                        throw new Error('Recognition failed: ' + result.RecognitionStatus);
-                    }
-
-                } catch (error) {
-                    this.showStatus(`Error: ${error.message}`, true);
-                } finally {
-                    this.convertBtn.disabled = false;
-                }
-            }
-
-            downloadTranscription() {
-                const text = this.transcriptionText.textContent;
-                const blob = new Blob([text], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'transcription.txt';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
-        }
-
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', () => {
-            new AudioTranscriber();
-        });
-    </script>
+  <script src="app.js"></script>
 </body>
 </html>
