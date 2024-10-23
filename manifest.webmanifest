@@ -1,7 +1,7 @@
 {
   "name": "VoiceNote",
   "short_name": "VoiceNote",
-  "description": "A powerful transcribe app",
+  "description": "High-quality Speech Transcriber!",
   "start_url": "./index.html",
   "scope": ".",
   "display": "standalone",
