@@ -1,14 +1,14 @@
 {
-  "name": "NotePad",
-  "short_name": "NotePad",
-  "description": "A powerful note-taking app",
+  "name": "VoiceNote",
+  "short_name": "VoiceNote",
+  "description": "A powerful transcribe app",
   "start_url": "./index.html",
   "scope": ".",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#cc0000",
+  "background_color": "#EBF8FF",
+  "theme_color": "#EEF2FF",
   "orientation": "natural",
-  "categories": ["productivity", "utilities"],
+  "categories": ["transcription", "utilities"],
   "icons": [
     {
       "src": "icon-192x192.png",
