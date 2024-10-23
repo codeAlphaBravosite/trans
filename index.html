@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio to Text Converter</title>
+    <title>Audio/Video to Text Converter</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js"></script>
@@ -13,10 +13,10 @@
         <!-- Header with modern design -->
         <div class="text-center mb-12">
             <div class="flex items-center justify-center mb-4">
-                <i class="fas fa-microphone text-4xl text-indigo-600 mr-3"></i>
-                <h1 class="text-4xl font-bold text-gray-800">Audio to Text</h1>
+                <i class="fas fa-microphone text-indigo-600 mr-3"></i>
+                <h1 class="text-4xl font-bold text-gray-800">Audio/Video to Text</h1>
             </div>
-            <p class="text-indigo-600 font-medium">Turn audio/speech into high quality text</p>
+            <p class="text-indigo-600 font-medium">Convert audio/video files into high quality text</p>
         </div>
 
         <!-- Main Conversion Panel -->
@@ -46,17 +46,18 @@
                         </div>
 
                         <div>
-                            <label class="block text-gray-700 text-sm font-medium mb-2" for="audioFile">
-                                Audio File
+                            <label class="block text-gray-700 text-sm font-medium mb-2" for="mediaFile">
+                                Media File
                             </label>
                             <div class="relative">
-                                <input type="file" id="audioFile" accept="audio/wav,audio/mp3,audio/ogg"
+                                <input type="file" id="mediaFile" accept="audio/wav,audio/mp3,audio/ogg,video/mp4"
                                     class="hidden" onchange="updateFileName()">
-                                <button onclick="document.getElementById('audioFile').click()" 
+                                <button onclick="document.getElementById('mediaFile').click()" 
                                     class="w-full px-4 py-2 border-2 border-dashed border-indigo-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition-all duration-300 flex items-center justify-center">
                                     <i class="fas fa-cloud-upload-alt mr-2"></i>
-                                    <span id="fileName">Choose Audio File</span>
+                                    <span id="fileName">Choose Audio/Video File</span>
                                 </button>
+                                <p class="text-sm text-gray-500 mt-1">Supported formats: WAV, MP3, OGG, MP4</p>
                             </div>
                         </div>
                     </div>
@@ -64,8 +65,7 @@
 
                 <!-- Conversion Button and Progress -->
                 <div>
-                  
-                    <button onclick="convertSpeechToText()" id="convertButton"
+                    <button onclick="startConversion()" id="convertButton"
                         class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center mb-4">
                         <i class="fas fa-sync-alt mr-2"></i>
                         Convert to Text
@@ -112,7 +112,7 @@
             </div>
         </div>
 
-        <!-- Configuration Panel (Collapsible) -->
+        <!-- Configuration Panel -->
         <div class="bg-white rounded-xl shadow-lg overflow-hidden">
             <button onclick="toggleConfig()" 
                 class="w-full px-6 py-4 text-left font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none flex items-center justify-between">
@@ -160,101 +160,42 @@
     </div>
 
     <script>
-        // Existing functions remain the same
+        // Helper function to extract audio from video
+        async function extractAudioFromVideo(videoFile) {
+            return new Promise((resolve, reject) => {
+                const video = document.createElement('video');
+                video.src = URL.createObjectURL(videoFile);
+                video.load();
 
-        // Add new function for configuration panel toggle
-        function toggleConfig() {
-            const configPanel = document.getElementById('configPanel');
-            const configArrow = document.getElementById('configArrow');
-            configPanel.classList.toggle('hidden');
-            configArrow.style.transform = configPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+                video.onloadedmetadata = () => {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const mediaElementSource = audioContext.createMediaElementSource(video);
+                    const destination = audioContext.createMediaStreamDestination();
+                    mediaElementSource.connect(destination);
+
+                    const mediaRecorder = new MediaRecorder(destination.stream);
+                    const chunks = [];
+
+                    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(chunks, { type: 'audio/wav' });
+                        resolve(blob);
+                    };
+
+                    video.onended = () => mediaRecorder.stop();
+                    mediaRecorder.start();
+                    video.play();
+                };
+
+                video.onerror = reject;
+            });
         }
 
-        // Check for saved API key on load and show config panel if not set
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
-            } else {
-                // Show config panel if API key is not set
-                toggleConfig();
-            }
-            
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
-        });
-        
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
-            }
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
-        });
-
-        function saveApiKey() {
+        // Main conversion function
+        async function startConversion() {
             const apiKey = document.getElementById('apiKey').value;
             const region = document.getElementById('region').value;
-            if (apiKey && region) {
-                localStorage.setItem('azureApiKey', apiKey);
-                localStorage.setItem('azureRegion', region);
-                showToast('Settings saved successfully!');
-            } else {
-                showToast('Please enter both API Key and Region', 'error');
-            }
-        }
-
-        // New helper functions
-        function togglePassword() {
-            const input = document.getElementById('apiKey');
-            input.type = input.type === 'password' ? 'text' : 'password';
-            const icon = document.querySelector('.fa-eye');
-            icon.classList.toggle('fa-eye-slash');
-        }
-
-        function updateFileName() {
-            const input = document.getElementById('audioFile');
-            const fileName = document.getElementById('fileName');
-            if (input.files.length > 0) {
-                fileName.textContent = input.files[0].name;
-            } else {
-                fileName.textContent = 'Choose Audio File';
-            }
-        }
-
-        function copyToClipboard() {
-            const textarea = document.getElementById('result');
-            textarea.select();
-            document.execCommand('copy');
-            showToast('Text copied to clipboard!');
-        }
-
-        function clearText() {
-            document.getElementById('result').value = '';
-            showToast('Text cleared');
-        }
-
-        function showToast(message, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.remove();
-            }, 3000);
-        }
-
-        // Original convertSpeechToText function remains the same
-        async function convertSpeechToText() {
-            const apiKey = document.getElementById('apiKey').value;
-            const region = document.getElementById('region').value;
-            const audioFile = document.getElementById('audioFile').files[0];
+            const mediaFile = document.getElementById('mediaFile').files[0];
             const language = document.getElementById('language').value;
             const resultArea = document.getElementById('result');
             const progressContainer = document.getElementById('progressContainer');
@@ -267,8 +208,8 @@
                 return;
             }
 
-            if (!audioFile) {
-                showToast('Please select an audio file', 'error');
+            if (!mediaFile) {
+                showToast('Please select a media file', 'error');
                 return;
             }
 
@@ -280,6 +221,15 @@
             progressText.textContent = 'Starting conversion...';
 
             try {
+                let audioFile = mediaFile;
+                
+                // If it's a video file, extract the audio first
+                if (mediaFile.type.startsWith('video')) {
+                    progressText.textContent = 'Extracting audio from video...';
+                    progressBar.style.width = '10%';
+                    audioFile = await extractAudioFromVideo(mediaFile);
+                }
+
                 const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(apiKey, region);
                 speechConfig.speechRecognitionLanguage = language;
                 const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(audioFile);
@@ -340,6 +290,55 @@
             }
         }
 
+        // Utility functions
+        function toggleConfig() {
+            const configPanel = document.getElementById('configPanel');
+            const configArrow = document.getElementById('configArrow');
+            configPanel.classList.toggle('hidden');
+            configArrow.style.transform = configPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+
+        function updateFileName() {
+            const input = document.getElementById('mediaFile');
+            const fileName = document.getElementById('fileName');
+            if (input.files.length > 0) {
+                fileName.textContent = input.files[0].name;
+            } else {
+                fileName.textContent = 'Choose Audio/Video File';
+            }
+        }
+
+        function copyToClipboard() {
+            const textarea = document.getElementById('result');
+            textarea.select();
+            document.execCommand('copy');
+            showToast('Text copied to clipboard!');
+        }
+
+        function clearText() {
+            document.getElementById('result').value = '';
+            showToast('Text cleared');
+        }
+
+        function togglePassword() {
+            const input = document.getElementById('apiKey');
+            input.type = input.type === 'password' ? 'text' : 'password';
+            const icon = document.querySelector('.fa-eye');
+            icon.classList.toggle('fa-eye-slash');
+        }
+
+        function saveApiKey() {
+            const apiKey = document.getElementById('apiKey').value;
+            const region = document.getElementById('region').value;
+            if (apiKey && region) {
+                localStorage.setItem('azureApiKey', apiKey);
+                localStorage.setItem('azureRegion', region);
+                showToast('Settings saved successfully!');
+            } else {
+                showToast('Please enter both API Key and Region', 'error');
+            }
+        }
+
         function downloadText() {
             const text = document.getElementById('result').value;
             if (!text) {
@@ -358,6 +357,33 @@
             document.body.removeChild(a);
             showToast('Text downloaded successfully!');
         }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        // Check for saved API key on load
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedApiKey = localStorage.getItem('azureApiKey');
+            const savedRegion = localStorage.getItem('azureRegion');
+            
+            if (savedApiKey) {
+                document.getElementById('apiKey').value = savedApiKey;
+            } else {
+                // Show config panel if API key is not set
+                toggleConfig();
+            }
+            
+            if (savedRegion) {
+                document.getElementById('region').value = savedRegion;
+            }
+        });
     </script>
 </body>
-    </html>
+</html>
