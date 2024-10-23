@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio to Text Converter</title>
+    <title>Audio/Video to Text Converter</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js"></script>
+    <!-- Add FFmpeg for video processing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.11.0/ffmpeg.min.js"></script>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
     <div class="container mx-auto px-4 py-8 max-w-4xl">
@@ -14,9 +16,9 @@
         <div class="text-center mb-12">
             <div class="flex items-center justify-center mb-4">
                 <i class="fas fa-microphone text-4xl text-indigo-600 mr-3"></i>
-                <h1 class="text-4xl font-bold text-gray-800">Audio to Text</h1>
+                <h1 class="text-4xl font-bold text-gray-800">Audio/Video to Text</h1>
             </div>
-            <p class="text-indigo-600 font-medium">Turn audio/speech into high quality text</p>
+            <p class="text-indigo-600 font-medium">Convert audio/video into high quality text</p>
         </div>
 
         <!-- Main Conversion Panel -->
@@ -46,16 +48,16 @@
                         </div>
 
                         <div>
-                            <label class="block text-gray-700 text-sm font-medium mb-2" for="audioFile">
-                                Audio File
+                            <label class="block text-gray-700 text-sm font-medium mb-2" for="mediaFile">
+                                Audio/Video File
                             </label>
                             <div class="relative">
-                                <input type="file" id="audioFile" accept="audio/wav,audio/mp3,audio/ogg"
+                                <input type="file" id="mediaFile" accept="audio/wav,audio/mp3,audio/ogg,video/mp4"
                                     class="hidden" onchange="updateFileName()">
-                                <button onclick="document.getElementById('audioFile').click()" 
+                                <button onclick="document.getElementById('mediaFile').click()" 
                                     class="w-full px-4 py-2 border-2 border-dashed border-indigo-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition-all duration-300 flex items-center justify-center">
                                     <i class="fas fa-cloud-upload-alt mr-2"></i>
-                                    <span id="fileName">Choose Audio File</span>
+                                    <span id="fileName">Choose Audio/Video File</span>
                                 </button>
                             </div>
                         </div>
@@ -64,8 +66,7 @@
 
                 <!-- Conversion Button and Progress -->
                 <div>
-                  
-                    <button onclick="convertSpeechToText()" id="convertButton"
+                    <button onclick="startConversion()" id="convertButton"
                         class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center mb-4">
                         <i class="fas fa-sync-alt mr-2"></i>
                         Convert to Text
@@ -160,204 +161,261 @@
     </div>
 
     <script>
-        // Existing functions remain the same
+    // ====== FFmpeg Setup ======
+    const ffmpeg = createFFmpeg({ log: true });
+    let ffmpegLoaded = false;
 
-        // Add new function for configuration panel toggle
-        function toggleConfig() {
-            const configPanel = document.getElementById('configPanel');
-            const configArrow = document.getElementById('configArrow');
-            configPanel.classList.toggle('hidden');
-            configArrow.style.transform = configPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+    // Load FFmpeg when page loads
+    (async () => {
+        try {
+            await ffmpeg.load();
+            ffmpegLoaded = true;
+            console.log('FFmpeg loaded successfully');
+        } catch (error) {
+            console.error('FFmpeg loading failed:', error);
+            showToast('Error loading video processing component', 'error');
+        }
+    })();
+
+    // ====== File Handling Functions ======
+    function updateFileName() {
+        const input = document.getElementById('mediaFile');
+        const fileName = document.getElementById('fileName');
+        if (input.files.length > 0) {
+            fileName.textContent = input.files[0].name;
+        } else {
+            fileName.textContent = 'Choose Audio/Video File';
+        }
+    }
+
+    async function convertVideoToWav(videoFile) {
+        if (!ffmpegLoaded) {
+            throw new Error('Video processing component is not loaded yet. Please try again in a moment.');
         }
 
-        // Check for saved API key on load and show config panel if not set
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
-            } else {
-                // Show config panel if API key is not set
-                toggleConfig();
-            }
-            
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
-        });
-        
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
-            }
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
-        });
+        try {
+            const videoData = await videoFile.arrayBuffer();
+            ffmpeg.FS('writeFile', 'input.mp4', new Uint8Array(videoData));
 
-        function saveApiKey() {
-            const apiKey = document.getElementById('apiKey').value;
-            const region = document.getElementById('region').value;
-            if (apiKey && region) {
-                localStorage.setItem('azureApiKey', apiKey);
-                localStorage.setItem('azureRegion', region);
-                showToast('Settings saved successfully!');
-            } else {
-                showToast('Please enter both API Key and Region', 'error');
-            }
+            // Convert video to WAV format
+            await ffmpeg.run('-i', 'input.mp4', '-vn', '-acodec', 'pcm_s16le', '-ar', '44100', '-ac', '2', 'output.wav');
+
+            // Read the result
+            const data = ffmpeg.FS('readFile', 'output.wav');
+
+            // Clean up files
+            ffmpeg.FS('unlink', 'input.mp4');
+            ffmpeg.FS('unlink', 'output.wav');
+
+            return new Blob([data.buffer], { type: 'audio/wav' });
+        } catch (error) {
+            throw new Error(`Video conversion failed: ${error.message}`);
+        }
+    }
+
+    // ====== Main Conversion Functions ======
+    async function startConversion() {
+        const mediaFile = document.getElementById('mediaFile').files[0];
+        if (!mediaFile) {
+            showToast('Please select a file', 'error');
+            return;
         }
 
-        // New helper functions
-        function togglePassword() {
-            const input = document.getElementById('apiKey');
-            input.type = input.type === 'password' ? 'text' : 'password';
-            const icon = document.querySelector('.fa-eye');
-            icon.classList.toggle('fa-eye-slash');
-        }
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const convertButton = document.getElementById('convertButton');
 
-        function updateFileName() {
-            const input = document.getElementById('audioFile');
-            const fileName = document.getElementById('fileName');
-            if (input.files.length > 0) {
-                fileName.textContent = input.files[0].name;
-            } else {
-                fileName.textContent = 'Choose Audio File';
-            }
-        }
-
-        function copyToClipboard() {
-            const textarea = document.getElementById('result');
-            textarea.select();
-            document.execCommand('copy');
-            showToast('Text copied to clipboard!');
-        }
-
-        function clearText() {
-            document.getElementById('result').value = '';
-            showToast('Text cleared');
-        }
-
-        function showToast(message, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.remove();
-            }, 3000);
-        }
-
-        // Original convertSpeechToText function remains the same
-        async function convertSpeechToText() {
-            const apiKey = document.getElementById('apiKey').value;
-            const region = document.getElementById('region').value;
-            const audioFile = document.getElementById('audioFile').files[0];
-            const language = document.getElementById('language').value;
-            const resultArea = document.getElementById('result');
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const convertButton = document.getElementById('convertButton');
-
-            if (!apiKey || !region) {
-                showToast('Please enter your Azure API Key and Region', 'error');
-                return;
-            }
-
-            if (!audioFile) {
-                showToast('Please select an audio file', 'error');
-                return;
-            }
-
+        try {
+            // Disable button and show progress
             convertButton.disabled = true;
             convertButton.classList.add('opacity-50');
             progressContainer.classList.remove('hidden');
-            resultArea.value = '';
             progressBar.style.width = '0%';
-            progressText.textContent = 'Starting conversion...';
+            progressText.textContent = 'Processing file...';
 
-            try {
-                const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(apiKey, region);
-                speechConfig.speechRecognitionLanguage = language;
-                const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(audioFile);
-                const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
-
+            let audioFile = mediaFile;
+            
+            // Convert MP4 to WAV if needed
+            if (mediaFile.type === 'video/mp4') {
+                progressText.textContent = 'Converting video to audio...';
                 progressBar.style.width = '20%';
-                progressText.textContent = 'Processing audio...';
+                audioFile = await convertVideoToWav(mediaFile);
+                progressBar.style.width = '40%';
+            }
 
-                let transcribedText = '';
+            // Proceed with transcription
+            progressText.textContent = 'Starting transcription...';
+            await convertSpeechToText(audioFile);
 
-                recognizer.recognized = (s, e) => {
-                    if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
-                        transcribedText += e.result.text + ' ';
-                        resultArea.value = transcribedText;
-                        
-                        const currentWidth = parseInt(progressBar.style.width);
-                        if (currentWidth < 90) {
-                            progressBar.style.width = (currentWidth + 10) + '%';
-                        }
+        } catch (error) {
+            console.error('Conversion error:', error);
+            showToast(`Error: ${error.message}`, 'error');
+            progressContainer.classList.add('hidden');
+        } finally {
+            convertButton.disabled = false;
+            convertButton.classList.remove('opacity-50');
+        }
+    }
+
+    async function convertSpeechToText(audioFile) {
+        const apiKey = document.getElementById('apiKey').value;
+        const region = document.getElementById('region').value;
+        const language = document.getElementById('language').value;
+        const resultArea = document.getElementById('result');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+
+        if (!apiKey || !region) {
+            showToast('Please enter your Azure API Key and Region', 'error');
+            return;
+        }
+
+        resultArea.value = '';
+
+        try {
+            const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(apiKey, region);
+            speechConfig.speechRecognitionLanguage = language;
+            const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(audioFile);
+            const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+            progressBar.style.width = '60%';
+            progressText.textContent = 'Transcribing...';
+
+            let transcribedText = '';
+
+            recognizer.recognized = (s, e) => {
+                if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+                    transcribedText += e.result.text + ' ';
+                    resultArea.value = transcribedText;
+                    
+                    const currentWidth = parseInt(progressBar.style.width);
+                    if (currentWidth < 90) {
+                        progressBar.style.width = (currentWidth + 5) + '%';
                     }
-                };
+                }
+            };
 
-                await new Promise((resolve, reject) => {
-                    recognizer.startContinuousRecognitionAsync(
+            await new Promise((resolve, reject) => {
+                recognizer.startContinuousRecognitionAsync(
+                    () => {
+                        progressBar.style.width = '70%';
+                        progressText.textContent = 'Recognition in progress...';
+                    },
+                    (err) => {
+                        reject(err);
+                    }
+                );
+
+                setTimeout(() => {
+                    recognizer.stopContinuousRecognitionAsync(
                         () => {
-                            progressBar.style.width = '40%';
-                            progressText.textContent = 'Recognition started...';
+                            resolve();
                         },
                         (err) => {
                             reject(err);
                         }
                     );
+                }, 30000); // 30 second timeout
+            });
 
-                    setTimeout(() => {
-                        recognizer.stopContinuousRecognitionAsync(
-                            () => {
-                                resolve();
-                            },
-                            (err) => {
-                                reject(err);
-                            }
-                        );
-                    }, 30000);
-                });
+            progressBar.style.width = '100%';
+            progressText.textContent = 'Completed!';
+            showToast('Conversion completed successfully!');
 
-                progressBar.style.width = '100%';
-                progressText.textContent = 'Completed!';
-                showToast('Conversion completed successfully!');
+        } catch (error) {
+            throw error;
+        }
+    }
 
-            } catch (error) {
-                console.error('Conversion error:', error);
-                progressContainer.classList.add('hidden');
-                showToast(`Error: ${error.message}`, 'error');
-                resultArea.value = `Error occurred: ${error.message}`;
-            } finally {
-                convertButton.disabled = false;
-                convertButton.classList.remove('opacity-50');
-            }
+    // ====== UI Utility Functions ======
+    function toggleConfig() {
+        const configPanel = document.getElementById('configPanel');
+        const configArrow = document.getElementById('configArrow');
+        configPanel.classList.toggle('hidden');
+        configArrow.style.transform = configPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+    }
+
+    function togglePassword() {
+        const input = document.getElementById('apiKey');
+        const icon = document.querySelector('.fa-eye');
+        input.type = input.type === 'password' ? 'text' : 'password';
+        icon.classList.toggle('fa-eye-slash');
+    }
+
+    function copyToClipboard() {
+        const textarea = document.getElementById('result');
+        textarea.select();
+        document.execCommand('copy');
+        showToast('Text copied to clipboard!');
+    }
+
+    function clearText() {
+        document.getElementById('result').value = '';
+        showToast('Text cleared');
+    }
+
+    function downloadText() {
+        const text = document.getElementById('result').value;
+        if (!text) {
+            showToast('No text to download', 'error');
+            return;
         }
 
-        function downloadText() {
-            const text = document.getElementById('result').value;
-            if (!text) {
-                showToast('No text to download', 'error');
-                return;
-            }
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'transcription.txt';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        showToast('Text downloaded successfully!');
+    }
 
-            const blob = new Blob([text], { type: 'text/plain' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'transcription.txt';
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            showToast('Text downloaded successfully!');
+    // ====== Settings Management ======
+    function saveApiKey() {
+        const apiKey = document.getElementById('apiKey').value;
+        const region = document.getElementById('region').value;
+        if (apiKey && region) {
+            localStorage.setItem('azureApiKey', apiKey);
+            localStorage.setItem('azureRegion', region);
+            showToast('Settings saved successfully!');
+        } else {
+            showToast('Please enter both API Key and Region', 'error');
         }
-    </script>
+    }
+
+    // ====== Notification System ======
+    function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
+    }
+
+    // ====== Initialize on Page Load ======
+    document.addEventListener('DOMContentLoaded', () => {
+        // Load saved settings
+        const savedApiKey = localStorage.getItem('azureApiKey');
+        const savedRegion = localStorage.getItem('azureRegion');
+        
+        if (savedApiKey) {
+            document.getElementById('apiKey').value = savedApiKey;
+        } else {
+            // Show config panel if API key is not set
+            toggleConfig();
+        }
+        
+        if (savedRegion) {
+            document.getElementById('region').value = savedRegion;
+        }
+    });
+                              </script>
+    
 </body>
-    </html>
+</html>
