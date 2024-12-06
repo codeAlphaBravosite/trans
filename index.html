@@ -57,12 +57,12 @@
                                 Audio File
                             </label>
                             <div class="relative">
-                                <input type="file" id="audioFile" accept="audio/wav,audio/mp3,audio/ogg"
+                                <input type="file" id="audioFile" accept="audio/wav,video/mp4"
                                     class="hidden" onchange="updateFileName()">
                                 <button onclick="document.getElementById('audioFile').click()" 
                                     class="w-full px-4 py-2 border-2 border-dashed border-indigo-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition-all duration-300 flex items-center justify-center">
                                     <i class="fas fa-cloud-upload-alt mr-2"></i>
-                                    <span id="fileName">Choose Audio File</span>
+                                    <span id="fileName">Choose Audio/Video File</span>
                                 </button>
                             </div>
                         </div>
@@ -167,205 +167,230 @@
     </div>
 
     <script>
-        // Existing functions remain the same
+// Configuration storage keys
+const CONFIG_KEY = 'azure_key';
+const CONFIG_REGION = 'azure_region';
 
-        // Add new function for configuration panel toggle
-        function toggleConfig() {
-            const configPanel = document.getElementById('configPanel');
-            const configArrow = document.getElementById('configArrow');
-            configPanel.classList.toggle('hidden');
-            configArrow.style.transform = configPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
-        }
+// UI Elements
+const fileNameDisplay = document.getElementById('fileName');
+const progressContainer = document.getElementById('progressContainer');
+const progressBar = document.getElementById('progressBar');
+const transcribedText = document.getElementById('transcribedText');
+const configPanel = document.getElementById('configPanel');
 
-        // Check for saved API key on load and show config panel if not set
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
-            } else {
-                // Show config panel if API key is not set
-                toggleConfig();
-            }
-            
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
-        });
+// Audio conversion utilities
+async function convertToWav(audioFile) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    progressContainer.classList.remove('hidden');
+    progressBar.style.width = '30%';
+
+    try {
+        const arrayBuffer = await audioFile.arrayBuffer();
+        progressBar.style.width = '50%';
         
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        progressBar.style.width = '70%';
+        
+        const wavFile = createWavFile(audioBuffer);
+        progressBar.style.width = '90%';
+        
+        const blob = new Blob([wavFile], { type: 'audio/wav' });
+        const wavAudioFile = new File([blob], `${audioFile.name.split('.')[0]}.wav`, { type: 'audio/wav' });
+        
+        progressBar.style.width = '100%';
+        setTimeout(() => {
+            progressContainer.classList.add('hidden');
+            progressBar.style.width = '0%';
+        }, 1000);
+        
+        return wavAudioFile;
+    } catch (err) {
+        console.error('Error converting audio:', err);
+        progressContainer.classList.add('hidden');
+        progressBar.style.width = '0%';
+        throw new Error('Failed to convert audio file. Please ensure it contains valid audio data.');
+    }
+}
+
+function createWavFile(audioBuffer) {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const length = audioBuffer.length * numChannels * 2;
+    const buffer = new ArrayBuffer(44 + length);
+    const view = new DataView(buffer);
+    
+    // Write WAV header
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + length, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true);
+    view.setUint16(32, numChannels * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, length, true);
+    
+    const offset = 44;
+    const channels = [];
+    for (let i = 0; i < numChannels; i++) {
+        channels.push(audioBuffer.getChannelData(i));
+    }
+    
+    let index = 0;
+    for (let i = 0; i < audioBuffer.length; i++) {
+        for (let channel = 0; channel < numChannels; channel++) {
+            const sample = Math.max(-1, Math.min(1, channels[channel][i]));
+            view.setInt16(offset + index, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+            index += 2;
+        }
+    }
+    
+    return buffer;
+}
+
+function writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+    }
+}
+
+// Main functionality
+async function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        let fileToProcess = file;
+        
+        // Update filename display
+        fileNameDisplay.textContent = file.name;
+        
+        // Convert MP4 if necessary
+        if (file.type === 'video/mp4') {
+            try {
+                fileToProcess = await convertToWav(file);
+                fileNameDisplay.textContent = fileToProcess.name;
+            } catch (err) {
+                alert(err.message);
+                return;
             }
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
+        }
+        
+        // Proceed with Azure speech-to-text
+        const key = localStorage.getItem(CONFIG_KEY);
+        const region = localStorage.getItem(CONFIG_REGION);
+        
+        if (!key || !region) {
+            alert('Please configure your Azure credentials first.');
+            return;
+        }
+
+        await processAudioFile(fileToProcess, key, region);
+
+    } catch (err) {
+        console.error('Error processing file:', err);
+        alert('Error processing file. Please try again.');
+    }
+}
+
+async function processAudioFile(file, key, region) {
+    progressContainer.classList.remove('hidden');
+    progressBar.style.width = '0%';
+
+    try {
+        const audioData = await file.arrayBuffer();
+        progressBar.style.width = '30%';
+
+        const response = await fetch(`https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US`, {
+            method: 'POST',
+            headers: {
+                'Ocp-Apim-Subscription-Key': key,
+                'Content-Type': 'audio/wav'
+            },
+            body: audioData
         });
 
-        function saveApiKey() {
-            const apiKey = document.getElementById('apiKey').value;
-            const region = document.getElementById('region').value;
-            if (apiKey && region) {
-                localStorage.setItem('azureApiKey', apiKey);
-                localStorage.setItem('azureRegion', region);
-                showToast('Settings saved successfully!');
-            } else {
-                showToast('Please enter both API Key and Region', 'error');
-            }
+        progressBar.style.width = '70%';
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // New helper functions
-        function togglePassword() {
-            const input = document.getElementById('apiKey');
-            input.type = input.type === 'password' ? 'text' : 'password';
-            const icon = document.querySelector('.fa-eye');
-            icon.classList.toggle('fa-eye-slash');
+        const result = await response.json();
+        progressBar.style.width = '100%';
+
+        if (result.DisplayText) {
+            transcribedText.value = result.DisplayText;
+        } else {
+            alert('No text was recognized from the audio.');
         }
 
-        function updateFileName() {
-            const input = document.getElementById('audioFile');
-            const fileName = document.getElementById('fileName');
-            if (input.files.length > 0) {
-                fileName.textContent = input.files[0].name;
-            } else {
-                fileName.textContent = 'Choose Audio File';
-            }
-        }
-
-        function copyToClipboard() {
-            const textarea = document.getElementById('result');
-            textarea.select();
-            document.execCommand('copy');
-            showToast('Text copied to clipboard!');
-        }
-
-        function clearText() {
-            document.getElementById('result').value = '';
-            showToast('Text cleared');
-        }
-
-        function showToast(message, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.remove();
-            }, 3000);
-        }
-
-        // Original convertSpeechToText function remains the same
-        async function convertSpeechToText() {
-            const apiKey = document.getElementById('apiKey').value;
-            const region = document.getElementById('region').value;
-            const audioFile = document.getElementById('audioFile').files[0];
-            const language = document.getElementById('language').value;
-            const resultArea = document.getElementById('result');
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const convertButton = document.getElementById('convertButton');
-
-            if (!apiKey || !region) {
-                showToast('Please enter your Azure API Key and Region', 'error');
-                return;
-            }
-
-            if (!audioFile) {
-                showToast('Please select an audio file', 'error');
-                return;
-            }
-
-            convertButton.disabled = true;
-            convertButton.classList.add('opacity-50');
-            progressContainer.classList.remove('hidden');
-            resultArea.value = '';
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error processing audio. Please try again.');
+    } finally {
+        setTimeout(() => {
+            progressContainer.classList.add('hidden');
             progressBar.style.width = '0%';
-            progressText.textContent = 'Starting conversion...';
+        }, 1000);
+    }
+}
 
-            try {
-                const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(apiKey, region);
-                speechConfig.speechRecognitionLanguage = language;
-                const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(audioFile);
-                const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+// Configuration panel functionality
+function toggleConfig() {
+    configPanel.classList.toggle('hidden');
+}
 
-                progressBar.style.width = '20%';
-                progressText.textContent = 'Processing audio...';
+function saveConfig() {
+    const key = document.getElementById('azureKey').value;
+    const region = document.getElementById('azureRegion').value;
+    
+    localStorage.setItem(CONFIG_KEY, key);
+    localStorage.setItem(CONFIG_REGION, region);
+    
+    alert('Configuration saved successfully!');
+    configPanel.classList.add('hidden');
+}
 
-                let transcribedText = '';
+function loadConfig() {
+    const key = localStorage.getItem(CONFIG_KEY) || '';
+    const region = localStorage.getItem(CONFIG_REGION) || '';
+    
+    document.getElementById('azureKey').value = key;
+    document.getElementById('azureRegion').value = region;
+}
 
-                recognizer.recognized = (s, e) => {
-                    if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
-                        transcribedText += e.result.text + ' ';
-                        resultArea.value = transcribedText;
-                        
-                        const currentWidth = parseInt(progressBar.style.width);
-                        if (currentWidth < 90) {
-                            progressBar.style.width = (currentWidth + 10) + '%';
-                        }
-                    }
-                };
+// Clear functionality
+function clearAll() {
+    transcribedText.value = '';
+    fileNameDisplay.textContent = 'Choose Audio File';
+}
 
-                await new Promise((resolve, reject) => {
-                    recognizer.startContinuousRecognitionAsync(
-                        () => {
-                            progressBar.style.width = '40%';
-                            progressText.textContent = 'Recognition started...';
-                        },
-                        (err) => {
-                            reject(err);
-                        }
-                    );
+// Download functionality
+function downloadText() {
+    if (!transcribedText.value) {
+        alert('No text to download!');
+        return;
+    }
 
-                    setTimeout(() => {
-                        recognizer.stopContinuousRecognitionAsync(
-                            () => {
-                                resolve();
-                            },
-                            (err) => {
-                                reject(err);
-                            }
-                        );
-                    }, 30000);
-                });
+    const blob = new Blob([transcribedText.value], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'transcription.txt';
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
 
-                progressBar.style.width = '100%';
-                progressText.textContent = 'Completed!';
-                showToast('Conversion completed successfully!');
-
-            } catch (error) {
-                console.error('Conversion error:', error);
-                progressContainer.classList.add('hidden');
-                showToast(`Error: ${error.message}`, 'error');
-                resultArea.value = `Error occurred: ${error.message}`;
-            } finally {
-                convertButton.disabled = false;
-                convertButton.classList.remove('opacity-50');
-            }
-        }
-
-        function downloadText() {
-            const text = document.getElementById('result').value;
-            if (!text) {
-                showToast('No text to download', 'error');
-                return;
-            }
-
-            const blob = new Blob([text], { type: 'text/plain' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'transcription.txt';
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            showToast('Text downloaded successfully!');
-        }
-    </script>
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadConfig();
+});
+</script>
 
     <script>
   if ('serviceWorker' in navigator) {
