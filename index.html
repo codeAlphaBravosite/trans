@@ -4,20 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceNote</title>
-    
-    <link rel="icon" href="./icon-192x192.png" type="image/png">
-<link rel="shortcut icon" href="./icon-192x192.png" type="image/png">
-<link rel="apple-touch-icon" href="./icon-192x192.png">
 
-    <link rel="manifest" href="./manifest.webmanifest">
-    
+    <link rel="icon" href="./icon-192x192.png" type="image/png">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@latest"></script>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
     <div class="container mx-auto px-4 py-8 max-w-4xl">
-        <!-- Header with modern design -->
+        <!-- Header -->
         <div class="text-center mb-12">
             <div class="flex items-center justify-center mb-4">
                 <i class="fas fa-microphone text-4xl text-indigo-600 mr-3"></i>
@@ -26,23 +21,18 @@
             <p class="text-indigo-600 font-medium">High-quality Speech Transcriber!</p>
         </div>
 
-        <!-- Main Conversion Panel -->
+        <!-- Main Panel -->
         <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
             <div class="grid md:grid-cols-2 gap-6">
-                <!-- Language and File Upload Section -->
+                <!-- Language and File Upload -->
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800 mb-6 flex items-center">
-                        <i class="fas fa-language text-indigo-600 mr-2"></i>
-                        Convert
+                        <i class="fas fa-language text-indigo-600 mr-2"></i> Convert
                     </h2>
-
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-gray-700 text-sm font-medium mb-2" for="language">
-                                Language
-                            </label>
-                            <select id="language" 
-                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300">
+                            <label class="block text-gray-700 text-sm font-medium mb-2" for="language">Language</label>
+                            <select id="language" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
                                 <option value="en-US">English (US)</option>
                                 <option value="hi-IN">Hindi</option>
                                 <option value="es-ES">Spanish</option>
@@ -53,333 +43,168 @@
                         </div>
 
                         <div>
-                            <label class="block text-gray-700 text-sm font-medium mb-2" for="audioFile">
-                                Audio File
-                            </label>
+                            <label class="block text-gray-700 text-sm font-medium mb-2" for="mediaFile">Media File</label>
                             <div class="relative">
-                                <input type="file" id="audioFile" accept="audio/wav,audio/mp3,audio/ogg"
-                                    class="hidden" onchange="updateFileName()">
-                                <button onclick="document.getElementById('audioFile').click()" 
-                                    class="w-full px-4 py-2 border-2 border-dashed border-indigo-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition-all duration-300 flex items-center justify-center">
+                                <input type="file" id="mediaFile" accept="video/mp4,audio/wav,audio/mp3,audio/ogg" class="hidden" onchange="updateFileName()">
+                                <button onclick="document.getElementById('mediaFile').click()" class="w-full px-4 py-2 border-2 border-dashed border-indigo-300 rounded-lg">
                                     <i class="fas fa-cloud-upload-alt mr-2"></i>
-                                    <span id="fileName">Choose Audio File</span>
+                                    <span id="fileName">Choose Media File</span>
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Conversion Button and Progress -->
+                <!-- Conversion Button -->
                 <div>
-                  
-                    <button onclick="convertSpeechToText()" id="convertButton"
-                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center mb-4">
-                        <i class="fas fa-sync-alt mr-2"></i>
-                        Convert to Text
+                    <button onclick="convertSpeechToText()" id="convertButton" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg mb-4">
+                        <i class="fas fa-sync-alt mr-2"></i> Convert to Text
                     </button>
 
-                    <!-- Progress Bar -->
+                    <!-- Progress -->
                     <div id="progressContainer" class="hidden">
                         <div class="w-full bg-gray-200 rounded-full h-2">
-                            <div id="progressBar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            <div id="progressBar" class="bg-indigo-600 h-2 rounded-full" style="width: 0%"></div>
                         </div>
                         <p id="progressText" class="text-sm text-gray-600 mt-2 text-center"></p>
                     </div>
                 </div>
             </div>
 
-            <!-- Result Section -->
+            <!-- Result -->
             <div class="mt-6">
-                <label class="block text-gray-700 text-sm font-medium mb-2">
-                    Transcribed Text
-                </label>
-                <div class="relative">
-                    <textarea id="result" rows="6" readonly
-                        class="w-full px-4 py-3 text-gray-700 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
-                        placeholder="Result will appear here..."></textarea>
-                    <button onclick="copyToClipboard()" 
-                        class="absolute top-2 right-2 text-gray-500 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition-all duration-300">
-                        <i class="fas fa-copy"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="mt-4 flex space-x-4">
-                <button onclick="downloadText()" 
-                    class="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center">
-                    <i class="fas fa-download mr-2"></i>
-                    Download
-                </button>
-                <button onclick="clearText()" 
-                    class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center">
-                    <i class="fas fa-trash-alt mr-2"></i>
-                    Clear
+                <label class="block text-gray-700 text-sm font-medium mb-2">Transcribed Text</label>
+                <textarea id="result" rows="6" readonly class="w-full px-4 py-3 border border-gray-300 rounded-lg"></textarea>
+                <button onclick="copyToClipboard()" class="mt-2 px-4 py-2 bg-gray-600 text-white rounded-lg">
+                    Copy to Clipboard
                 </button>
             </div>
         </div>
 
-        <!-- Configuration Panel (Collapsible) -->
+        <!-- Configuration Panel -->
         <div class="bg-white rounded-xl shadow-lg overflow-hidden">
-            <button onclick="toggleConfig()" 
-                class="w-full px-6 py-4 text-left font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none flex items-center justify-between">
+            <button onclick="toggleConfig()" class="w-full px-6 py-4 text-left font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none">
                 <div class="flex items-center">
-                    <i class="fas fa-cog text-indigo-600 mr-2"></i>
-                    App Settings
+                    <i class="fas fa-cog text-indigo-600 mr-2"></i> App Settings
                 </div>
-                <i id="configArrow" class="fas fa-chevron-down transition-transform duration-300"></i>
             </button>
-            
             <div id="configPanel" class="hidden px-6 pb-6">
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-gray-700 text-sm font-medium mb-2" for="apiKey">
-                            Key
-                        </label>
-                        <div class="relative">
-                            <input type="password" id="apiKey" 
-                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
-                                placeholder="Enter your Key">
-                            <button onclick="togglePassword()" 
-                                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-indigo-600">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
+                        <label class="block text-gray-700 text-sm font-medium mb-2" for="apiKey">Key</label>
+                        <input type="password" id="apiKey" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
                     </div>
-
                     <div>
-                        <label class="block text-gray-700 text-sm font-medium mb-2" for="region">
-                            Region
-                        </label>
-                        <input type="text" id="region" 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
-                            placeholder="e.g., centralindia" value="centralindia">
+                        <label class="block text-gray-700 text-sm font-medium mb-2" for="region">Region</label>
+                        <input type="text" id="region" class="w-full px-4 py-2 border border-gray-300 rounded-lg" value="centralindia">
                     </div>
-
-                    <button onclick="saveApiKey()" 
-                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center">
-                        <i class="fas fa-save mr-2"></i>
-                        Save Settings
-                    </button>
+                    <button onclick="saveApiKey()" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg">Save</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Existing functions remain the same
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: true });
 
-        // Add new function for configuration panel toggle
-        function toggleConfig() {
-            const configPanel = document.getElementById('configPanel');
-            const configArrow = document.getElementById('configArrow');
-            configPanel.classList.toggle('hidden');
-            configArrow.style.transform = configPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+        function updateFileName() {
+            const input = document.getElementById('mediaFile');
+            const fileName = document.getElementById('fileName');
+            fileName.textContent = input.files.length ? input.files[0].name : 'Choose Media File';
         }
-
-        // Check for saved API key on load and show config panel if not set
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
-            } else {
-                // Show config panel if API key is not set
-                toggleConfig();
-            }
-            
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
-        });
-        
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
-            }
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
-        });
 
         function saveApiKey() {
             const apiKey = document.getElementById('apiKey').value;
             const region = document.getElementById('region').value;
-            if (apiKey && region) {
-                localStorage.setItem('azureApiKey', apiKey);
-                localStorage.setItem('azureRegion', region);
-                showToast('Settings saved successfully!');
-            } else {
-                showToast('Please enter both API Key and Region', 'error');
-            }
+            localStorage.setItem('azureApiKey', apiKey);
+            localStorage.setItem('azureRegion', region);
+            alert('Settings saved successfully!');
         }
 
-        // New helper functions
-        function togglePassword() {
-            const input = document.getElementById('apiKey');
-            input.type = input.type === 'password' ? 'text' : 'password';
-            const icon = document.querySelector('.fa-eye');
-            icon.classList.toggle('fa-eye-slash');
+        async function extractAudioFromMP4(file) {
+            if (!ffmpeg.isLoaded()) await ffmpeg.load();
+
+            const inputFileName = 'input.mp4';
+            const outputFileName = 'output.wav';
+
+            ffmpeg.FS('writeFile', inputFileName, await fetchFile(file));
+            await ffmpeg.run('-i', inputFileName, '-vn', '-acodec', 'pcm_s16le', '-ar', '44100', '-ac', '1', outputFileName);
+
+            const data = ffmpeg.FS('readFile', outputFileName);
+            return new Blob([data.buffer], { type: 'audio/wav' });
         }
 
-        function updateFileName() {
-            const input = document.getElementById('audioFile');
-            const fileName = document.getElementById('fileName');
-            if (input.files.length > 0) {
-                fileName.textContent = input.files[0].name;
-            } else {
-                fileName.textContent = 'Choose Audio File';
+        async function convertSpeechToText() {
+            const apiKey = localStorage.getItem('azureApiKey');
+            const region = localStorage.getItem('azureRegion');
+            const mediaFile = document.getElementById('mediaFile').files[0];
+            const language = document.getElementById('language').value;
+            const resultArea = document.getElementById('result');
+
+            if (!apiKey || !region || !mediaFile) {
+                alert('Please ensure all settings are configured and a file is uploaded.');
+                return;
             }
+
+            const progressBar = document.getElementById('progressBar');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressText = document.getElementById('progressText');
+
+            progressContainer.classList.remove('hidden');
+            progressText.textContent = 'Processing...';
+
+            let audioBlob = mediaFile;
+            if (mediaFile.type === 'video/mp4') {
+                audioBlob = await extractAudioFromMP4(mediaFile);
+            }
+
+            const audioFile = new File([audioBlob], 'audio.wav', { type: 'audio/wav' });
+
+            const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(apiKey, region);
+            speechConfig.speechRecognitionLanguage = language;
+            const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(audioFile);
+            const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+            recognizer.recognized = (s, e) => {
+                if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+                    resultArea.value += e.result.text + ' ';
+                }
+            };
+
+            recognizer.startContinuousRecognitionAsync(
+                () => {
+                    progressText.textContent = 'Transcription complete!';
+                },
+                (err) => {
+                    console.error(err);
+                    progressText.textContent = 'Error occurred.';
+                }
+            );
+        }
+
+        function toggleConfig() {
+            const configPanel = document.getElementById('configPanel');
+            configPanel.classList.toggle('hidden');
         }
 
         function copyToClipboard() {
-            const textarea = document.getElementById('result');
-            textarea.select();
-            document.execCommand('copy');
-            showToast('Text copied to clipboard!');
-        }
-
-        function clearText() {
-            document.getElementById('result').value = '';
-            showToast('Text cleared');
-        }
-
-        function showToast(message, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.remove();
-            }, 3000);
-        }
-
-        // Original convertSpeechToText function remains the same
-        async function convertSpeechToText() {
-            const apiKey = document.getElementById('apiKey').value;
-            const region = document.getElementById('region').value;
-            const audioFile = document.getElementById('audioFile').files[0];
-            const language = document.getElementById('language').value;
             const resultArea = document.getElementById('result');
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const convertButton = document.getElementById('convertButton');
-
-            if (!apiKey || !region) {
-                showToast('Please enter your Azure API Key and Region', 'error');
-                return;
-            }
-
-            if (!audioFile) {
-                showToast('Please select an audio file', 'error');
-                return;
-            }
-
-            convertButton.disabled = true;
-            convertButton.classList.add('opacity-50');
-            progressContainer.classList.remove('hidden');
-            resultArea.value = '';
-            progressBar.style.width = '0%';
-            progressText.textContent = 'Starting conversion...';
-
-            try {
-                const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(apiKey, region);
-                speechConfig.speechRecognitionLanguage = language;
-                const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(audioFile);
-                const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
-
-                progressBar.style.width = '20%';
-                progressText.textContent = 'Processing audio...';
-
-                let transcribedText = '';
-
-                recognizer.recognized = (s, e) => {
-                    if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
-                        transcribedText += e.result.text + ' ';
-                        resultArea.value = transcribedText;
-                        
-                        const currentWidth = parseInt(progressBar.style.width);
-                        if (currentWidth < 90) {
-                            progressBar.style.width = (currentWidth + 10) + '%';
-                        }
-                    }
-                };
-
-                await new Promise((resolve, reject) => {
-                    recognizer.startContinuousRecognitionAsync(
-                        () => {
-                            progressBar.style.width = '40%';
-                            progressText.textContent = 'Recognition started...';
-                        },
-                        (err) => {
-                            reject(err);
-                        }
-                    );
-
-                    setTimeout(() => {
-                        recognizer.stopContinuousRecognitionAsync(
-                            () => {
-                                resolve();
-                            },
-                            (err) => {
-                                reject(err);
-                            }
-                        );
-                    }, 30000);
-                });
-
-                progressBar.style.width = '100%';
-                progressText.textContent = 'Completed!';
-                showToast('Conversion completed successfully!');
-
-            } catch (error) {
-                console.error('Conversion error:', error);
-                progressContainer.classList.add('hidden');
-                showToast(`Error: ${error.message}`, 'error');
-                resultArea.value = `Error occurred: ${error.message}`;
-            } finally {
-                convertButton.disabled = false;
-                convertButton.classList.remove('opacity-50');
-            }
+            resultArea.select();
+            document.execCommand('copy');
+            alert('Text copied to clipboard!');
         }
 
-        function downloadText() {
-            const text = document.getElementById('result').value;
-            if (!text) {
-                showToast('No text to download', 'error');
-                return;
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedApiKey = localStorage.getItem('azureApiKey');
+            const savedRegion = localStorage.getItem('azureRegion');
+            if (savedApiKey) {
+                document.getElementById('apiKey').value = savedApiKey;
             }
-
-            const blob = new Blob([text], { type: 'text/plain' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'transcription.txt';
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            showToast('Text downloaded successfully!');
-        }
-    </script>
-
-    <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then(registration => {
-          console.log('Service Worker registered successfully:', registration.scope);
-        })
-        .catch(error => {
-          console.log('Service Worker registration failed:', error);
+            if (savedRegion) {
+                document.getElementById('region').value = savedRegion;
+            }
         });
-    });
-  }
     </script>
-    
 </body>
-    </html>
+</html>
