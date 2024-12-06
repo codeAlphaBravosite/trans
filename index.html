@@ -166,73 +166,8 @@
         </div>
     </div>
 
+
     <script type="text/javascript">
-// Media Handler Class for processing audio/video files
-class MediaHandler {
-  constructor() {
-    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  }
-
-  isSupportedFileType(file) {
-    const supportedTypes = ['audio/wav', 'video/mp4'];
-    return supportedTypes.includes(file.type);
-  }
-
-  async processFile(file) {
-    if (!this.isSupportedFileType(file)) {
-      throw new Error('Unsupported file type. Please upload a .wav or .mp4 file.');
-    }
-
-    if (file.type === 'video/mp4') {
-      return await this.convertVideoToWav(file);
-    }
-    
-    return file;
-  }
-
-  async convertVideoToWav(videoFile) {
-    const video = document.createElement('video');
-    const videoUrl = URL.createObjectURL(videoFile);
-    video.src = videoUrl;
-
-    await new Promise((resolve) => {
-      video.addEventListener('loadedmetadata', resolve);
-    });
-
-    const mediaStream = video.captureStream();
-    const mediaStreamSource = this.audioContext.createMediaStreamSource(mediaStream);
-    const mediaStreamDestination = this.audioContext.createMediaStreamDestination();
-
-    mediaStreamSource.connect(mediaStreamDestination);
-    video.play();
-
-    const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream);
-    const audioChunks = [];
-
-    mediaRecorder.ondataavailable = (event) => {
-      audioChunks.push(event.data);
-    };
-
-    const wavBlob = await new Promise((resolve) => {
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-        resolve(audioBlob);
-      };
-
-      mediaRecorder.start();
-      setTimeout(() => {
-        mediaRecorder.stop();
-        video.pause();
-        URL.revokeObjectURL(videoUrl);
-      }, video.duration * 1000);
-    });
-
-    return new File([wavBlob], `${videoFile.name.replace('.mp4', '.wav')}`, {
-      type: 'audio/wav'
-    });
-  }
-}
-
 // Azure Speech Service configuration
 let speechConfig;
 let audioConfig;
@@ -240,7 +175,7 @@ let speechRecognizer;
 let isTranscribing = false;
 let transcribedText = '';
 
-// Initialize Azure Speech Service
+// Initialize Speech Service
 function initializeSpeechService(key, region) {
     try {
         speechConfig = SpeechSDK.SpeechConfig.fromSubscription(key, region);
@@ -251,7 +186,7 @@ function initializeSpeechService(key, region) {
     }
 }
 
-// Save Azure configuration
+// Save configuration
 function saveConfig() {
     const key = document.getElementById('azureKey').value;
     const region = document.getElementById('azureRegion').value;
@@ -279,8 +214,9 @@ function loadSavedConfig() {
     if (savedKey && savedRegion) {
         document.getElementById('azureKey').value = savedKey;
         document.getElementById('azureRegion').value = savedRegion;
-        initializeSpeechService(savedKey, savedRegion);
+        return initializeSpeechService(savedKey, savedRegion);
     }
+    return false;
 }
 
 // Toggle configuration panel
@@ -289,10 +225,53 @@ function toggleConfig() {
     configPanel.classList.toggle('hidden');
 }
 
-// Process audio with Azure Speech-to-Text
+// Convert MP4 to WAV
+async function convertMP4ToWAV(file) {
+    const video = document.createElement('video');
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const videoUrl = URL.createObjectURL(file);
+    video.src = videoUrl;
+
+    await new Promise((resolve) => {
+        video.addEventListener('loadedmetadata', resolve);
+    });
+
+    const mediaStream = video.captureStream();
+    const mediaStreamSource = audioContext.createMediaStreamSource(mediaStream);
+    const mediaStreamDestination = audioContext.createMediaStreamDestination();
+
+    mediaStreamSource.connect(mediaStreamDestination);
+    video.play();
+
+    const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream);
+    const audioChunks = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+        audioChunks.push(event.data);
+    };
+
+    const wavBlob = await new Promise((resolve) => {
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            resolve(audioBlob);
+        };
+
+        mediaRecorder.start();
+        setTimeout(() => {
+            mediaRecorder.stop();
+            video.pause();
+            URL.revokeObjectURL(videoUrl);
+        }, video.duration * 1000);
+    });
+
+    return new File([wavBlob], file.name.replace('.mp4', '.wav'), { type: 'audio/wav' });
+}
+
+// Process audio with Azure
 async function processAudioWithAzure(audioFile) {
     if (!speechConfig) {
-        throw new Error('Speech Service not initialized. Please configure your Azure credentials.');
+        document.getElementById('configPanel').classList.remove('hidden');
+        throw new Error('Please configure Azure credentials first.');
     }
 
     const audioBuffer = await audioFile.arrayBuffer();
@@ -334,11 +313,11 @@ async function processAudioWithAzure(audioFile) {
 // Handle file selection
 async function handleFileSelect(event) {
     const file = event.target.files[0];
+    if (!file) return;
+
     const progressBar = document.getElementById('progressBar');
     const progressContainer = document.getElementById('progressContainer');
     const fileName = document.getElementById('fileName');
-    
-    if (!file) return;
     
     fileName.textContent = file.name;
     
@@ -346,12 +325,14 @@ async function handleFileSelect(event) {
         progressContainer.classList.remove('hidden');
         progressBar.style.width = '0%';
 
-        const mediaHandler = new MediaHandler();
-        progressBar.style.width = '30%';
+        // Process file based on type
+        let processedFile = file;
+        if (file.type === 'video/mp4') {
+            progressBar.style.width = '30%';
+            processedFile = await convertMP4ToWAV(file);
+        }
         
-        const processedFile = await mediaHandler.processFile(file);
         progressBar.style.width = '60%';
-        
         await processAudioWithAzure(processedFile);
         progressBar.style.width = '100%';
         
@@ -414,7 +395,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clear button listener
     document.getElementById('clearBtn').addEventListener('click', clearTranscription);
 });
-</script>
+                    </script>
+
       
     <script>
   if ('serviceWorker' in navigator) {
