@@ -57,7 +57,7 @@
                                 Audio File
                             </label>
                             <div class="relative">
-                                <input type="file" id="audioFile" accept="audio/wav,audio/mp3,audio/ogg"
+                                <input type="file" id="audioFile" accept=".wav,.mp4"
                                     class="hidden" onchange="updateFileName()">
                                 <button onclick="document.getElementById('audioFile').click()" 
                                     class="w-full px-4 py-2 border-2 border-dashed border-indigo-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition-all duration-300 flex items-center justify-center">
@@ -166,207 +166,256 @@
         </div>
     </div>
 
-    <script>
-        // Existing functions remain the same
+    <script type="text/javascript">
+// Media Handler Class for processing audio/video files
+class MediaHandler {
+  constructor() {
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
 
-        // Add new function for configuration panel toggle
-        function toggleConfig() {
-            const configPanel = document.getElementById('configPanel');
-            const configArrow = document.getElementById('configArrow');
-            configPanel.classList.toggle('hidden');
-            configArrow.style.transform = configPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
-        }
+  isSupportedFileType(file) {
+    const supportedTypes = ['audio/wav', 'video/mp4'];
+    return supportedTypes.includes(file.type);
+  }
 
-        // Check for saved API key on load and show config panel if not set
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
-            } else {
-                // Show config panel if API key is not set
-                toggleConfig();
-            }
-            
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
-        });
+  async processFile(file) {
+    if (!this.isSupportedFileType(file)) {
+      throw new Error('Unsupported file type. Please upload a .wav or .mp4 file.');
+    }
+
+    if (file.type === 'video/mp4') {
+      return await this.convertVideoToWav(file);
+    }
+    
+    return file;
+  }
+
+  async convertVideoToWav(videoFile) {
+    const video = document.createElement('video');
+    const videoUrl = URL.createObjectURL(videoFile);
+    video.src = videoUrl;
+
+    await new Promise((resolve) => {
+      video.addEventListener('loadedmetadata', resolve);
+    });
+
+    const mediaStream = video.captureStream();
+    const mediaStreamSource = this.audioContext.createMediaStreamSource(mediaStream);
+    const mediaStreamDestination = this.audioContext.createMediaStreamDestination();
+
+    mediaStreamSource.connect(mediaStreamDestination);
+    video.play();
+
+    const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream);
+    const audioChunks = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+      audioChunks.push(event.data);
+    };
+
+    const wavBlob = await new Promise((resolve) => {
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        resolve(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setTimeout(() => {
+        mediaRecorder.stop();
+        video.pause();
+        URL.revokeObjectURL(videoUrl);
+      }, video.duration * 1000);
+    });
+
+    return new File([wavBlob], `${videoFile.name.replace('.mp4', '.wav')}`, {
+      type: 'audio/wav'
+    });
+  }
+}
+
+// Azure Speech Service configuration
+let speechConfig;
+let audioConfig;
+let speechRecognizer;
+let isTranscribing = false;
+let transcribedText = '';
+
+// Initialize Azure Speech Service
+function initializeSpeechService(key, region) {
+    try {
+        speechConfig = SpeechSDK.SpeechConfig.fromSubscription(key, region);
+        return true;
+    } catch (error) {
+        console.error('Error initializing Speech Service:', error);
+        return false;
+    }
+}
+
+// Save Azure configuration
+function saveConfig() {
+    const key = document.getElementById('azureKey').value;
+    const region = document.getElementById('azureRegion').value;
+    
+    if (key && region) {
+        localStorage.setItem('azureKey', key);
+        localStorage.setItem('azureRegion', region);
         
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedApiKey = localStorage.getItem('azureApiKey');
-            const savedRegion = localStorage.getItem('azureRegion');
-            if (savedApiKey) {
-                document.getElementById('apiKey').value = savedApiKey;
-            }
-            if (savedRegion) {
-                document.getElementById('region').value = savedRegion;
-            }
-        });
-
-        function saveApiKey() {
-            const apiKey = document.getElementById('apiKey').value;
-            const region = document.getElementById('region').value;
-            if (apiKey && region) {
-                localStorage.setItem('azureApiKey', apiKey);
-                localStorage.setItem('azureRegion', region);
-                showToast('Settings saved successfully!');
-            } else {
-                showToast('Please enter both API Key and Region', 'error');
-            }
+        if (initializeSpeechService(key, region)) {
+            alert('Settings saved successfully!');
+            document.getElementById('configPanel').classList.add('hidden');
+        } else {
+            alert('Failed to initialize Speech Service. Please check your credentials.');
         }
+    } else {
+        alert('Please provide both Key and Region');
+    }
+}
 
-        // New helper functions
-        function togglePassword() {
-            const input = document.getElementById('apiKey');
-            input.type = input.type === 'password' ? 'text' : 'password';
-            const icon = document.querySelector('.fa-eye');
-            icon.classList.toggle('fa-eye-slash');
-        }
+// Load saved configuration
+function loadSavedConfig() {
+    const savedKey = localStorage.getItem('azureKey');
+    const savedRegion = localStorage.getItem('azureRegion');
+    
+    if (savedKey && savedRegion) {
+        document.getElementById('azureKey').value = savedKey;
+        document.getElementById('azureRegion').value = savedRegion;
+        initializeSpeechService(savedKey, savedRegion);
+    }
+}
 
-        function updateFileName() {
-            const input = document.getElementById('audioFile');
-            const fileName = document.getElementById('fileName');
-            if (input.files.length > 0) {
-                fileName.textContent = input.files[0].name;
-            } else {
-                fileName.textContent = 'Choose Audio File';
+// Toggle configuration panel
+function toggleConfig() {
+    const configPanel = document.getElementById('configPanel');
+    configPanel.classList.toggle('hidden');
+}
+
+// Process audio with Azure Speech-to-Text
+async function processAudioWithAzure(audioFile) {
+    if (!speechConfig) {
+        throw new Error('Speech Service not initialized. Please configure your Azure credentials.');
+    }
+
+    const audioBuffer = await audioFile.arrayBuffer();
+    const wavBuffer = new Uint8Array(audioBuffer);
+    
+    audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(wavBuffer);
+    speechRecognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+    return new Promise((resolve, reject) => {
+        transcribedText = '';
+        isTranscribing = true;
+
+        speechRecognizer.recognized = (s, e) => {
+            if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+                transcribedText += e.result.text + ' ';
+                document.getElementById('transcribedText').value = transcribedText.trim();
             }
-        }
+        };
 
-        function copyToClipboard() {
-            const textarea = document.getElementById('result');
-            textarea.select();
-            document.execCommand('copy');
-            showToast('Text copied to clipboard!');
-        }
-
-        function clearText() {
-            document.getElementById('result').value = '';
-            showToast('Text cleared');
-        }
-
-        function showToast(message, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.remove();
-            }, 3000);
-        }
-
-        // Original convertSpeechToText function remains the same
-        async function convertSpeechToText() {
-            const apiKey = document.getElementById('apiKey').value;
-            const region = document.getElementById('region').value;
-            const audioFile = document.getElementById('audioFile').files[0];
-            const language = document.getElementById('language').value;
-            const resultArea = document.getElementById('result');
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const convertButton = document.getElementById('convertButton');
-
-            if (!apiKey || !region) {
-                showToast('Please enter your Azure API Key and Region', 'error');
-                return;
+        speechRecognizer.recognizeOnceAsync(
+            result => {
+                isTranscribing = false;
+                if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+                    resolve(transcribedText.trim());
+                } else {
+                    reject(new Error('Speech recognition failed'));
+                }
+                speechRecognizer.close();
+            },
+            error => {
+                isTranscribing = false;
+                speechRecognizer.close();
+                reject(error);
             }
+        );
+    });
+}
 
-            if (!audioFile) {
-                showToast('Please select an audio file', 'error');
-                return;
-            }
+// Handle file selection
+async function handleFileSelect(event) {
+    const file = event.target.files[0];
+    const progressBar = document.getElementById('progressBar');
+    const progressContainer = document.getElementById('progressContainer');
+    const fileName = document.getElementById('fileName');
+    
+    if (!file) return;
+    
+    fileName.textContent = file.name;
+    
+    try {
+        progressContainer.classList.remove('hidden');
+        progressBar.style.width = '0%';
 
-            convertButton.disabled = true;
-            convertButton.classList.add('opacity-50');
-            progressContainer.classList.remove('hidden');
-            resultArea.value = '';
+        const mediaHandler = new MediaHandler();
+        progressBar.style.width = '30%';
+        
+        const processedFile = await mediaHandler.processFile(file);
+        progressBar.style.width = '60%';
+        
+        await processAudioWithAzure(processedFile);
+        progressBar.style.width = '100%';
+        
+        setTimeout(() => {
+            progressContainer.classList.add('hidden');
             progressBar.style.width = '0%';
-            progressText.textContent = 'Starting conversion...';
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Error processing file:', error);
+        alert(error.message);
+        progressContainer.classList.add('hidden');
+    }
+}
 
-            try {
-                const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(apiKey, region);
-                speechConfig.speechRecognitionLanguage = language;
-                const audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(audioFile);
-                const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+// Download transcribed text
+function downloadTranscription() {
+    const text = document.getElementById('transcribedText').value;
+    if (!text) {
+        alert('No text to download');
+        return;
+    }
 
-                progressBar.style.width = '20%';
-                progressText.textContent = 'Processing audio...';
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'transcription.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 
-                let transcribedText = '';
+// Clear transcribed text
+function clearTranscription() {
+    document.getElementById('transcribedText').value = '';
+    document.getElementById('fileName').textContent = 'Choose Audio File';
+}
 
-                recognizer.recognized = (s, e) => {
-                    if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
-                        transcribedText += e.result.text + ' ';
-                        resultArea.value = transcribedText;
-                        
-                        const currentWidth = parseInt(progressBar.style.width);
-                        if (currentWidth < 90) {
-                            progressBar.style.width = (currentWidth + 10) + '%';
-                        }
-                    }
-                };
+// Initialize event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // Load saved configuration
+    loadSavedConfig();
 
-                await new Promise((resolve, reject) => {
-                    recognizer.startContinuousRecognitionAsync(
-                        () => {
-                            progressBar.style.width = '40%';
-                            progressText.textContent = 'Recognition started...';
-                        },
-                        (err) => {
-                            reject(err);
-                        }
-                    );
+    // File input listener
+    const fileInput = document.querySelector('input[type="file"]');
+    fileInput.accept = '.wav,.mp4';
+    fileInput.addEventListener('change', handleFileSelect);
 
-                    setTimeout(() => {
-                        recognizer.stopContinuousRecognitionAsync(
-                            () => {
-                                resolve();
-                            },
-                            (err) => {
-                                reject(err);
-                            }
-                        );
-                    }, 30000);
-                });
+    // Config button listener
+    document.getElementById('configBtn').addEventListener('click', toggleConfig);
 
-                progressBar.style.width = '100%';
-                progressText.textContent = 'Completed!';
-                showToast('Conversion completed successfully!');
+    // Save config listener
+    document.getElementById('saveConfig').addEventListener('click', saveConfig);
 
-            } catch (error) {
-                console.error('Conversion error:', error);
-                progressContainer.classList.add('hidden');
-                showToast(`Error: ${error.message}`, 'error');
-                resultArea.value = `Error occurred: ${error.message}`;
-            } finally {
-                convertButton.disabled = false;
-                convertButton.classList.remove('opacity-50');
-            }
-        }
+    // Download button listener
+    document.getElementById('downloadBtn').addEventListener('click', downloadTranscription);
 
-        function downloadText() {
-            const text = document.getElementById('result').value;
-            if (!text) {
-                showToast('No text to download', 'error');
-                return;
-            }
-
-            const blob = new Blob([text], { type: 'text/plain' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'transcription.txt';
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            showToast('Text downloaded successfully!');
-        }
-    </script>
-
+    // Clear button listener
+    document.getElementById('clearBtn').addEventListener('click', clearTranscription);
+});
+</script>
+      
     <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
