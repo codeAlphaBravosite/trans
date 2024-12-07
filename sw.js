@@ -1,4 +1,4 @@
-const VERSION = '1.0.4';
+const VERSION = '1.0.5';
 const CACHE_NAME = `voicenote-cache-${VERSION}`;
 
 const STATIC_CACHE_URLS = [
